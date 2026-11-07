@@ -1,0 +1,15 @@
+[tools]
+python = "3.12"
+uv = "0.13.6"
+
+[tasks.setup]
+description = "Instala as dependências do projeto pelo uv.lock"
+run = "uv sync --frozen"
+
+[tasks.start]
+description = "Inicia a API em modo de desenvolvimento"
+run = "uv run --frozen uvicorn main:app --reload"
+
+[tasks.test]
+description = "Executa os testes mockados"
+run = "uv run --frozen pytest"

@@ -33,6 +33,14 @@ Certifique-se de que o `.env` siga a mesma estrutura do `.env.example`. Copiar o
 mise start
 ```
 
+### Execute os testes
+
+Os testes usam mocks e não exigem PostgreSQL ou Docker:
+
+```
+mise test
+```
+
 ## O que acontece por baixo dos panos com o `mise`
 
 O `mise` instala as ferramentas necessárias para configurar o ambiente, como a versão adequada do Python e o seu gerenciador de pacotes (usamos o `uv`).

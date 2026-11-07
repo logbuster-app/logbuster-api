@@ -1,0 +1,39 @@
+name: CI — Backend
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci-backend:
+    name: Lint e testes mockados
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Configurar Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+      - name: Instalar dependências travadas
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Conferir formatação
+        run: uv run --frozen ruff format --check .
+      - name: Testes mockados
+        run: uv run --frozen pytest

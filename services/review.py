@@ -1,9 +1,11 @@
 from collections.abc import Iterable
 from decimal import ROUND_HALF_UP, Decimal
+from uuid import UUID
 
 from pydantic import TypeAdapter
 
 from domain.enums import ReviewInteractionType, ReviewSort
+from domain.errors.reviews import ReviewNotFoundError
 from domain.models.review import Review
 from domain.schemas.movies import Identifier, MovieRating
 from domain.schemas.reviews import (
@@ -70,6 +72,17 @@ class ReviewService:
             page_size=query.page_size,
             sort=query.sort,
         )
+
+    def get(self, review_id: UUID, *, visitor_id: str | None = None) -> ReviewResponse:
+        row = self.repository.get_with_counts(review_id)
+        if row is None:
+            raise ReviewNotFoundError()
+        marked = (
+            self.repository.viewer_interactions([review_id], visitor_id)
+            if visitor_id
+            else {}
+        )
+        return self._to_response(row, marked.get(review_id, []))
 
     @staticmethod
     def _to_response(

@@ -5,6 +5,7 @@ import pytest
 from dependencies.services import get_review_service
 from dependencies.session import get_session
 from domain.enums import ReviewSort
+from domain.errors.reviews import ReviewNotFoundError
 from domain.schemas.movies import MovieRating
 from domain.schemas.reviews import (
     ReviewCounts,
@@ -218,7 +219,13 @@ def test_docs_and_openapi_document_contract(client):
     assert operations == {
         ("/api/v1/reviews", "post"),
         ("/api/v1/movies/{movie_id}/reviews", "get"),
+        ("/api/v1/reviews/{review_id}", "get"),
         ("/api/v1/movies/{movie_id}/rating", "get"),
+    }
+    detail = schema["paths"]["/api/v1/reviews/{review_id}"]["get"]
+    assert set(detail["responses"]) >= {"200", "400", "404", "422"}
+    assert detail["responses"]["404"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorResponse"
     }
     listing = schema["paths"]["/api/v1/movies/{movie_id}/reviews"]["get"]
     assert set(listing["responses"]) >= {"200", "400", "422"}
@@ -362,3 +369,66 @@ def test_list_invalid_movie_id_returns_422(client, review_service, movie_id):
     )
     assert error["message"] == "O movie_id deve ser um imdbID válido (ex.: tt0133093)."
     review_service.list.assert_not_called()
+
+
+def detail_url(review_id):
+    return f"{REVIEWS}/{review_id}"
+
+
+def test_get_review_returns_200_with_full_item(client, review_service, review):
+    review_service.get.return_value = ReviewResponse.from_model(
+        review, ReviewCounts(like=4, spoiler=0, well_argued=9)
+    )
+
+    response = client.get(detail_url(review.id))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": str(review.id),
+        "movie_id": MOVIE_ID,
+        "author_name": "Thyago",
+        "rating": 4.5,
+        "content": CONTENT,
+        "is_spoiler": False,
+        "highlights": ["direction", "visual_effects"],
+        "counts": {"like": 4, "spoiler": 0, "well_argued": 9},
+        "viewer_interactions": [],
+        "created_at": "2026-11-08T18:30:00Z",
+    }
+    review_service.get.assert_called_once_with(review.id, visitor_id=None)
+
+
+def test_get_review_forwards_visitor(client, review_service, review):
+    review_service.get.return_value = ReviewResponse.from_model(
+        review, viewer_interactions=["like"]
+    )
+    response = client.get(detail_url(review.id), headers={"X-Visitor-Id": "v1"})
+    assert response.json()["viewer_interactions"] == ["like"]
+    review_service.get.assert_called_once_with(review.id, visitor_id="v1")
+
+
+def test_missing_review_returns_404_envelope(client, review_service):
+    review_service.get.side_effect = ReviewNotFoundError()
+    response = client.get(detail_url(uuid4()))
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "NOT_FOUND",
+            "message": "Avaliação não encontrada.",
+            "details": [],
+        }
+    }
+
+
+@pytest.mark.parametrize("review_id", ["invalid", "123", "tt0133093"])
+def test_malformed_review_id_returns_422(client, review_service, review_id):
+    error = assert_error(client.get(detail_url(review_id)), 422, "VALIDATION_ERROR")
+    assert error["details"][0]["field"] == "review_id"
+    assert error["message"] == "O review_id deve ser um UUID válido."
+    review_service.get.assert_not_called()
+
+
+def test_get_review_too_long_visitor_returns_400(client, review_service):
+    response = client.get(detail_url(uuid4()), headers={"X-Visitor-Id": "x" * 65})
+    assert_error(response, 400, "BAD_REQUEST")
+    review_service.get.assert_not_called()

@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from domain.enums import Highlight, ReviewInteractionType, ReviewSort
+from domain.errors.reviews import ReviewNotFoundError
 from domain.models.review import Review
 from domain.schemas.reviews import ReviewCreate, ReviewResponse
 from repositories.review import ReviewWithCounts
@@ -234,3 +235,39 @@ def _columns(review):
     return {
         column.key: getattr(review, column.key) for column in Review.__table__.columns
     }
+
+
+def test_get_returns_counts_without_visitor(review_repository, review):
+    review_repository.get_with_counts.return_value = row(review, 4, 0, 9)
+
+    result = ReviewService(review_repository).get(review.id)
+
+    review_repository.get_with_counts.assert_called_once_with(review.id)
+    review_repository.viewer_interactions.assert_not_called()
+    assert result.id == review.id
+    assert result.counts.model_dump() == {"like": 4, "spoiler": 0, "well_argued": 9}
+    assert result.viewer_interactions == []
+
+
+def test_get_fills_viewer_interactions(review_repository, review):
+    review_repository.get_with_counts.return_value = row(review, 1, 0, 1)
+    review_repository.viewer_interactions.return_value = {
+        review.id: [ReviewInteractionType.WELL_ARGUED, ReviewInteractionType.LIKE]
+    }
+    result = ReviewService(review_repository).get(review.id, visitor_id="v1")
+    review_repository.viewer_interactions.assert_called_once_with([review.id], "v1")
+    assert result.viewer_interactions == ["like", "well_argued"]
+
+
+def test_get_visitor_without_votes(review_repository, review):
+    review_repository.get_with_counts.return_value = row(review)
+    review_repository.viewer_interactions.return_value = {}
+    result = ReviewService(review_repository).get(review.id, visitor_id="v1")
+    assert result.viewer_interactions == []
+
+
+def test_get_missing_review_raises_not_found(review_repository):
+    review_repository.get_with_counts.return_value = None
+    with pytest.raises(ReviewNotFoundError):
+        ReviewService(review_repository).get(uuid4(), visitor_id="v1")
+    review_repository.viewer_interactions.assert_not_called()

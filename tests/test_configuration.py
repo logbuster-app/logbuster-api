@@ -3,9 +3,8 @@ from unittest.mock import patch
 import pytest
 
 from config import Settings
-from dependencies.services import get_interaction_service, get_review_service
+from dependencies.services import get_review_service
 from dependencies.session import get_session
-from repositories.interaction import InteractionRepository
 from repositories.review import ReviewRepository
 from utils.database import (
     DatabaseConfigurationError,
@@ -71,11 +70,8 @@ def test_session_rolls_back_and_closes_after_failure(session):
 
 def test_dependency_factories_wire_repositories(session):
     review_service = get_review_service(session)
-    interaction_service = get_interaction_service(session)
     assert isinstance(review_service.repository, ReviewRepository)
-    assert isinstance(interaction_service.repository, InteractionRepository)
     assert review_service.repository.session is session
-    assert interaction_service.repository.session is session
 
 
 def test_cors_parses_origins(monkeypatch):

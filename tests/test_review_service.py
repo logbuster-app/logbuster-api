@@ -1,100 +1,99 @@
 from decimal import Decimal
-from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from domain.errors.movies import DuplicateReviewError, ReviewNotFoundError
-from domain.schemas.movies import ReviewCreate
+from domain.enums import Highlight
+from domain.schemas.reviews import ReviewCreate, ReviewResponse
 from services.review import ReviewService
 
+MOVIE_ID = "tt0133093"
 
-def test_create_review_runs_business_logic(review_repository, review):
+
+def test_create_review_runs_business_logic(review_repository, review, review_payload):
     review_repository.create.return_value = review
-    payload = ReviewCreate(user_id="user-1", rating=5, comment=review.comment)
 
-    result = ReviewService(review_repository).create("catalog:42", payload)
+    result = ReviewService(review_repository).create(ReviewCreate(**review_payload))
 
     saved = review_repository.create.call_args.args[0]
-    assert (saved.movie_id, saved.user_id, saved.rating, saved.comment) == (
-        "catalog:42",
-        "user-1",
-        5,
-        review.comment,
-    )
+    assert saved.movie_id == MOVIE_ID
+    assert saved.author_name == "Thyago"
+    assert saved.rating == Decimal("4.5") and isinstance(saved.rating, Decimal)
+    assert saved.content == review_payload["content"]
+    assert saved.is_spoiler is False
+    assert saved.highlights == ["direction", "visual_effects"]
+    assert isinstance(result, ReviewResponse)
     assert result.id == review.id
+    assert result.counts.model_dump() == {"like": 0, "spoiler": 0, "well_argued": 0}
+    assert result.viewer_interactions == []
     assert result.created_at.utcoffset().total_seconds() == 0
 
 
-@pytest.mark.parametrize("rating", [0, 6, -1, 1.5, True, "5", None])
-def test_service_rejects_invalid_rating_before_persisting(review_repository, rating):
-    payload = ReviewCreate.model_construct(user_id="user-1", rating=rating)
-    with pytest.raises(ValidationError):
-        ReviewService(review_repository).create("catalog:42", payload)
-    review_repository.create.assert_not_called()
-
-
-@pytest.mark.parametrize("rating", [1, 5])
-def test_service_accepts_rating_boundaries(review_repository, review, rating):
-    review.rating = rating
+@pytest.mark.parametrize("rating", [0.5, 1, 4.5, 5.0])
+def test_rating_is_stored_as_exact_decimal(
+    review_repository, review, review_payload, rating
+):
+    review.rating = Decimal(str(rating))
     review_repository.create.return_value = review
     result = ReviewService(review_repository).create(
-        review.movie_id, ReviewCreate(user_id=review.user_id, rating=rating)
+        ReviewCreate(**{**review_payload, "rating": rating})
     )
+    assert review_repository.create.call_args.args[0].rating == Decimal(str(rating))
     assert result.rating == rating
 
 
-def test_duplicate_review_conflict_is_preserved(review_repository):
-    review_repository.create.side_effect = DuplicateReviewError()
-    with pytest.raises(DuplicateReviewError):
-        ReviewService(review_repository).create(
-            "catalog:42", ReviewCreate(user_id="user-1", rating=3)
-        )
-    review_repository.create.assert_called_once()
-
-
-def test_list_reviews_uses_repository_pagination(review_repository, review):
-    review_repository.list.return_value = [review]
-    review_repository.count.return_value = 7
-    result = ReviewService(review_repository).list("catalog:42", limit=2, offset=4)
-    review_repository.list.assert_called_once_with("catalog:42", limit=2, offset=4)
-    review_repository.count.assert_called_once_with("catalog:42")
-    assert (len(result.items), result.total, result.limit, result.offset) == (
-        1,
-        7,
-        2,
-        4,
+def test_text_fields_are_normalized(review_repository, review, review_payload):
+    review_repository.create.return_value = review
+    payload = {
+        **review_payload,
+        "movie_id": f" {MOVIE_ID} ",
+        "author_name": "  Thyago  ",
+        "content": f"  {review_payload['content']}  ",
+    }
+    ReviewService(review_repository).create(ReviewCreate(**payload))
+    saved = review_repository.create.call_args.args[0]
+    assert (saved.movie_id, saved.author_name, saved.content) == (
+        MOVIE_ID,
+        "Thyago",
+        review_payload["content"],
     )
 
 
-def test_list_reviews_empty(review_repository):
-    review_repository.list.return_value = []
-    review_repository.count.return_value = 0
-    assert ReviewService(review_repository).list("unknown").model_dump() == {
-        "items": [],
-        "total": 0,
-        "limit": 20,
-        "offset": 0,
-    }
+def test_highlights_default_to_empty(review_repository, review, review_payload):
+    review.highlights = []
+    review_repository.create.return_value = review
+    payload = {k: v for k, v in review_payload.items() if k != "highlights"}
+    result = ReviewService(review_repository).create(ReviewCreate(**payload))
+    assert review_repository.create.call_args.args[0].highlights == []
+    assert result.highlights == []
 
 
-@pytest.mark.parametrize("limit,offset", [(0, 0), (101, 0), (20, -1)])
-def test_service_validates_pagination(review_repository, limit, offset):
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("rating", 4.3),
+        ("rating", 0),
+        ("highlights", [Highlight.ACTING] * 2),
+        ("movie_id", "catalog:42"),
+    ],
+)
+def test_service_revalidates_before_persisting(
+    review_repository, review_payload, field, value
+):
+    payload = ReviewCreate.model_construct(**{**review_payload, field: value})
     with pytest.raises(ValidationError):
-        ReviewService(review_repository).list("catalog:42", limit=limit, offset=offset)
-    review_repository.list.assert_not_called()
+        ReviewService(review_repository).create(payload)
+    review_repository.create.assert_not_called()
 
 
-def test_get_review(review_repository, review):
-    review_repository.get.return_value = review
-    assert ReviewService(review_repository).get(review.id).id == review.id
-    review_repository.get.assert_called_once_with(review.id)
-
-
-def test_get_missing_review(review_repository):
-    review_repository.get.return_value = None
-    with pytest.raises(ReviewNotFoundError):
-        ReviewService(review_repository).get(uuid4())
+def test_service_does_not_swallow_repository_failures(
+    review_repository, review_payload
+):
+    error = RuntimeError("Falha de persistência")
+    review_repository.create.side_effect = error
+    with pytest.raises(RuntimeError) as caught:
+        ReviewService(review_repository).create(ReviewCreate(**review_payload))
+    assert caught.value is error
 
 
 @pytest.mark.parametrize(
@@ -102,17 +101,18 @@ def test_get_missing_review(review_repository):
     [
         (Decimal("3.6666666667"), 3, 3.67),
         (Decimal("4.125"), 8, 4.13),
+        (Decimal("0.5"), 1, 0.5),
         (Decimal("5"), 1, 5.0),
         (None, 0, None),
     ],
 )
 def test_rating_rounding_and_empty_movie(review_repository, average, count, expected):
     review_repository.rating.return_value = (average, count)
-    result = ReviewService(review_repository).rating("catalog:42")
-    assert result.movie_id == "catalog:42"
+    result = ReviewService(review_repository).rating(MOVIE_ID)
+    assert result.movie_id == MOVIE_ID
     assert result.average_rating == expected
     assert result.reviews_count == count
-    review_repository.rating.assert_called_once_with("catalog:42")
+    review_repository.rating.assert_called_once_with(MOVIE_ID)
 
 
 @pytest.mark.parametrize("movie_id", ["", "   ", "x" * 129])
@@ -120,20 +120,3 @@ def test_invalid_movie_identifier(review_repository, movie_id):
     with pytest.raises(ValidationError):
         ReviewService(review_repository).rating(movie_id)
     review_repository.rating.assert_not_called()
-
-
-def test_service_does_not_swallow_repository_failures(review_repository):
-    error = RuntimeError("Falha de persistência")
-    review_repository.list.side_effect = error
-    with pytest.raises(RuntimeError) as caught:
-        ReviewService(review_repository).list("catalog:42")
-    assert caught.value is error
-
-
-def test_identifier_is_normalized(review_repository, review):
-    review_repository.create.return_value = review
-    ReviewService(review_repository).create(
-        " catalog:42 ", ReviewCreate(user_id=" user-1 ", rating=5)
-    )
-    saved = review_repository.create.call_args.args[0]
-    assert (saved.movie_id, saved.user_id) == ("catalog:42", "user-1")

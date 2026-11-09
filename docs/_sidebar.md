@@ -1,0 +1,5 @@
+- [Visão geral](README.md)
+- [Arquitetura](arquitetura.md)
+- [Padrão de erros](erros.md)
+- Endpoints
+  - [Avaliações](endpoints/avaliacoes.md)

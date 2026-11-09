@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from controllers.interaction import router as interaction_router
 from controllers.review import router as review_router
 from dependencies.visitor import VISITOR_HEADER
 from domain.schemas.errors import ErrorResponse
@@ -48,4 +49,5 @@ app.add_middleware(
     max_age=600,
 )
 app.include_router(review_router)
+app.include_router(interaction_router)
 register_error_handlers(app)

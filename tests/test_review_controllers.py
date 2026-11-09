@@ -220,6 +220,7 @@ def test_docs_and_openapi_document_contract(client):
         ("/api/v1/reviews", "post"),
         ("/api/v1/movies/{movie_id}/reviews", "get"),
         ("/api/v1/reviews/{review_id}", "get"),
+        ("/api/v1/reviews/{review_id}/interactions", "post"),
         ("/api/v1/movies/{movie_id}/rating", "get"),
     }
     detail = schema["paths"]["/api/v1/reviews/{review_id}"]["get"]

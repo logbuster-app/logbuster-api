@@ -39,6 +39,7 @@ tests/               Testes mockados
 **`review_interactions`**: um voto (`like`, `spoiler` ou `well_argued`) de um visitante anônimo (`X-Visitor-Id`) em uma avaliação.
 - A unique `(review_id, visitor_id, type)` garante no máximo 1 voto de cada tipo por visitante.
 - A FK para `reviews` usa `ON DELETE CASCADE`.
+- É gravada pelo `POST /api/v1/reviews/{review_id}/interactions` (`controllers/`, `services/` e `repositories/interaction.py`).
 - Os contadores (`counts`) das respostas são calculados a partir desta tabela.
 
 As regras de negócio são validadas no Pydantic, que dá a mensagem de erro amigável, e repetidas em `CHECK` no banco, que é a última linha de defesa.

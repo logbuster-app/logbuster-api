@@ -150,3 +150,46 @@ curl http://localhost:8000/api/v1/reviews/c4f7d9d2-9d4e-4b3a-8f55-1f2e3d4c5b6a \
   }
 }
 ```
+
+## `POST /api/v1/reviews/{review_id}/interactions` — votar em avaliação (`BACK-06`)
+
+SPEC: [SPEC-BACK-06](https://github.com/logbuster-app/logbuster-docs/blob/main/docs/specs/back/SPEC-BACK-06-post-interacao-avaliacao.md)
+
+Marca ou desmarca (*toggle*) um voto do visitante na avaliação:
+- **Primeiro envio** de um tipo: marca o voto (`active: true`) e soma 1 ao contador.
+- **Segundo envio** do mesmo tipo: desmarca (`active: false`) e subtrai 1.
+- **Tipos independentes:** o mesmo visitante pode ter `like`, `spoiler` e `well_argued` ao mesmo tempo, no máximo 1 de cada.
+
+| Parâmetro | Onde | Regra |
+| --- | --- | --- |
+| `review_id` | path | UUID da avaliação (`422` se malformado) |
+| `X-Visitor-Id` | header | **Obrigatório**, até 64 caracteres (`400` se ausente, vazio ou maior) |
+| `type` | body | `like`, `spoiler` ou `well_argued` (`422` para outro valor, como `dislike`) |
+
+```bash
+curl -X POST http://localhost:8000/api/v1/reviews/c4f7d9d2-9d4e-4b3a-8f55-1f2e3d4c5b6a/interactions \
+  -H "Content-Type: application/json" \
+  -H "X-Visitor-Id: 550e8400-e29b-41d4-a716-446655440000" \
+  -d '{"type": "well_argued"}'
+```
+
+**Resposta `200 OK`**, com os contadores já atualizados:
+
+```json
+{
+  "review_id": "c4f7d9d2-9d4e-4b3a-8f55-1f2e3d4c5b6a",
+  "type": "well_argued",
+  "active": true,
+  "counts": { "like": 4, "spoiler": 0, "well_argued": 10 },
+  "viewer_interactions": ["well_argued"]
+}
+```
+
+**Erros**
+- `400 BAD_REQUEST`: sem `X-Visitor-Id`. É verificado antes do corpo.
+- `404 NOT_FOUND`: não existe avaliação com esse `review_id`.
+- `422 VALIDATION_ERROR`: `type` inválido ou campo extra no corpo.
+
+**Concorrência:** a unique `(review_id, visitor_id, type)` no banco garante no máximo 1 voto de cada tipo por visitante. O toggle é feito com `DELETE ... RETURNING` seguido de `INSERT ... ON CONFLICT DO NOTHING`, então cliques simultâneos nunca geram voto duplicado nem erro.
+
+> O título do card cita "comentários de avaliações", mas a SPEC-BACK-06 deixa comentários de texto fora do escopo da entrega parcial. Este endpoint cobre só os votos.

@@ -9,9 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from dependencies.services import get_review_service
+from dependencies.services import get_interaction_service, get_review_service
 from domain.models.review import Review
 from repositories.review import ReviewRepository
+from services.interaction import InteractionService
 from services.review import ReviewService
 from utils.database import get_engine
 
@@ -81,8 +82,14 @@ def review_service():
 
 
 @pytest.fixture
-def client(review_service):
+def interaction_service():
+    return Mock(spec=InteractionService)
+
+
+@pytest.fixture
+def client(review_service, interaction_service):
     app.dependency_overrides[get_review_service] = lambda: review_service
+    app.dependency_overrides[get_interaction_service] = lambda: interaction_service
     try:
         with TestClient(app, raise_server_exceptions=False) as test_client:
             yield test_client

@@ -2,10 +2,9 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from domain.errors.movies import DuplicateReviewError
 from domain.models.review import Review
 
 
@@ -19,15 +18,6 @@ class ReviewRepository:
             self.session.flush()
             self.session.refresh(review)
             self.session.commit()
-        except IntegrityError as exc:
-            self.session.rollback()
-            if (
-                getattr(exc.orig, "sqlstate", None) == "23505"
-                and getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-                == "uq_reviews_movie_user"
-            ):
-                raise DuplicateReviewError() from exc
-            raise
         except SQLAlchemyError:
             self.session.rollback()
             raise
@@ -35,16 +25,6 @@ class ReviewRepository:
 
     def get(self, review_id: UUID) -> Review | None:
         return self.session.get(Review, review_id)
-
-    def list(self, movie_id: str, *, limit: int, offset: int) -> list[Review]:
-        statement = (
-            select(Review)
-            .where(Review.movie_id == movie_id)
-            .order_by(Review.created_at.desc(), Review.id.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-        return list(self.session.scalars(statement))
 
     def count(self, movie_id: str) -> int:
         statement = select(func.count(Review.id)).where(Review.movie_id == movie_id)

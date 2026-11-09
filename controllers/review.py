@@ -1,19 +1,20 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, status
 
 from dependencies.services import get_review_service
-from domain.schemas.movies import (
-    ErrorResponse,
-    MovieRating,
-    ReviewCreate,
-    ReviewPage,
-    ReviewRead,
-)
+from domain.schemas.errors import ErrorResponse
+from domain.schemas.movies import MovieRating
+from domain.schemas.reviews import ReviewCreate, ReviewResponse
 from services.review import ReviewService
 
-router = APIRouter(prefix="/api/v1", tags=["Avaliações"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["Avaliações"],
+    responses={
+        422: {"model": ErrorResponse, "description": "Dados inválidos"},
+    },
+)
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 MovieId = Annotated[
     str,
@@ -27,44 +28,18 @@ MovieId = Annotated[
 
 
 @router.post(
-    "/movies/{movie_id}/reviews",
-    response_model=ReviewRead,
+    "/reviews",
+    response_model=ReviewResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Cadastrar avaliação",
-    responses={
-        409: {"model": ErrorResponse, "description": "Usuário já avaliou o filme"}
-    },
+    description=(
+        "Cria uma avaliação com estrelas de 0.5 a 5.0 (passos de 0.5), descrição, "
+        "nome do autor, flag provisória de spoiler e até 2 destaques únicos. "
+        "A avaliação nasce com contadores de interação zerados."
+    ),
 )
-def create_review(
-    movie_id: MovieId, payload: ReviewCreate, service: ReviewServiceDep
-) -> ReviewRead:
-    return service.create(movie_id, payload)
-
-
-@router.get(
-    "/movies/{movie_id}/reviews",
-    response_model=ReviewPage,
-    summary="Listar avaliações de um filme",
-)
-def list_reviews(
-    movie_id: MovieId,
-    service: ReviewServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> ReviewPage:
-    return service.list(movie_id, limit=limit, offset=offset)
-
-
-@router.get(
-    "/reviews/{review_id}",
-    response_model=ReviewRead,
-    summary="Consultar avaliação",
-    responses={
-        404: {"model": ErrorResponse, "description": "Avaliação não encontrada"}
-    },
-)
-def get_review(review_id: UUID, service: ReviewServiceDep) -> ReviewRead:
-    return service.get(review_id)
+def create_review(payload: ReviewCreate, service: ReviewServiceDep) -> ReviewResponse:
+    return service.create(payload)
 
 
 @router.get(

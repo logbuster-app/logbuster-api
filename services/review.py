@@ -1,18 +1,10 @@
 from decimal import ROUND_HALF_UP, Decimal
-from uuid import UUID
 
 from pydantic import TypeAdapter
 
-from domain.errors.movies import ReviewNotFoundError
 from domain.models.review import Review
-from domain.schemas.movies import (
-    Identifier,
-    MovieRating,
-    PaginationParams,
-    ReviewCreate,
-    ReviewPage,
-    ReviewRead,
-)
+from domain.schemas.movies import Identifier, MovieRating
+from domain.schemas.reviews import ReviewCreate, ReviewResponse
 from repositories.review import ReviewRepository
 
 _identifier = TypeAdapter(Identifier)
@@ -22,28 +14,19 @@ class ReviewService:
     def __init__(self, repository: ReviewRepository) -> None:
         self.repository = repository
 
-    def create(self, movie_id: str, payload: ReviewCreate) -> ReviewRead:
-        movie_id = _identifier.validate_python(movie_id)
+    def create(self, payload: ReviewCreate) -> ReviewResponse:
         payload = ReviewCreate.model_validate(payload)
-        review = Review(movie_id=movie_id, **payload.model_dump())
-        return ReviewRead.model_validate(self.repository.create(review))
-
-    def list(self, movie_id: str, *, limit: int = 20, offset: int = 0) -> ReviewPage:
-        movie_id = _identifier.validate_python(movie_id)
-        params = PaginationParams(limit=limit, offset=offset)
-        items = self.repository.list(movie_id, limit=params.limit, offset=params.offset)
-        return ReviewPage(
-            items=[ReviewRead.model_validate(item) for item in items],
-            total=self.repository.count(movie_id),
-            limit=params.limit,
-            offset=params.offset,
+        review = Review(
+            movie_id=payload.movie_id,
+            author_name=payload.author_name,
+            # Decimal a partir do texto evita ruído binário de float no Numeric.
+            rating=Decimal(str(payload.rating)),
+            content=payload.content,
+            is_spoiler=payload.is_spoiler,
+            highlights=[highlight.value for highlight in payload.highlights],
         )
-
-    def get(self, review_id: UUID) -> ReviewRead:
-        review = self.repository.get(review_id)
-        if review is None:
-            raise ReviewNotFoundError()
-        return ReviewRead.model_validate(review)
+        # Recém-criada: contadores zerados e nenhum voto do visitante (RN-05).
+        return ReviewResponse.from_model(self.repository.create(review))
 
     def rating(self, movie_id: str) -> MovieRating:
         movie_id = _identifier.validate_python(movie_id)

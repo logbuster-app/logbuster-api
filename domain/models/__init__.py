@@ -1,4 +1,4 @@
-from domain.models.interaction import Interaction
 from domain.models.review import Review
+from domain.models.review_interaction import ReviewInteraction
 
-__all__ = ["Interaction", "Review"]
+__all__ = ["Review", "ReviewInteraction"]

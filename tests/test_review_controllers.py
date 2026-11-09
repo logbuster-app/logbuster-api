@@ -4,8 +4,13 @@ import pytest
 
 from dependencies.services import get_review_service
 from dependencies.session import get_session
+from domain.enums import ReviewSort
 from domain.schemas.movies import MovieRating
-from domain.schemas.reviews import ReviewResponse
+from domain.schemas.reviews import (
+    ReviewCounts,
+    ReviewListResponse,
+    ReviewResponse,
+)
 from main import app
 
 MOVIE_ID = "tt0133093"
@@ -212,7 +217,18 @@ def test_docs_and_openapi_document_contract(client):
     }
     assert operations == {
         ("/api/v1/reviews", "post"),
+        ("/api/v1/movies/{movie_id}/reviews", "get"),
         ("/api/v1/movies/{movie_id}/rating", "get"),
+    }
+    listing = schema["paths"]["/api/v1/movies/{movie_id}/reviews"]["get"]
+    assert set(listing["responses"]) >= {"200", "400", "422"}
+    parameters = {(p["name"], p["in"]) for p in listing["parameters"]}
+    assert parameters == {
+        ("movie_id", "path"),
+        ("sort", "query"),
+        ("page", "query"),
+        ("page_size", "query"),
+        ("X-Visitor-Id", "header"),
     }
     post = schema["paths"]["/api/v1/reviews"]["post"]
     assert set(post["responses"]) >= {"201", "422", "500", "503"}
@@ -229,9 +245,120 @@ def test_configured_cors_preflight(client):
         headers={
             "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "Content-Type",
+            "Access-Control-Request-Headers": "Content-Type, X-Visitor-Id",
         },
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
     assert "access-control-allow-credentials" not in response.headers
+    allowed = response.headers["access-control-allow-headers"].lower()
+    assert "x-visitor-id" in allowed and "content-type" in allowed
+
+
+LIST = f"/api/v1/movies/{MOVIE_ID}/reviews"
+
+
+def list_response(review, **overrides):
+    item = ReviewResponse.from_model(
+        review, ReviewCounts(like=4, spoiler=0, well_argued=9), ["well_argued"]
+    )
+    return ReviewListResponse(
+        items=[item], total=1, page=1, page_size=10, sort=ReviewSort.WELL_ARGUED
+    ).model_copy(update=overrides)
+
+
+def test_list_reviews_defaults(client, review_service, review):
+    review_service.list.return_value = list_response(review)
+
+    response = client.get(LIST)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"items", "total", "page", "page_size", "sort"}
+    assert (body["total"], body["page"], body["page_size"], body["sort"]) == (
+        1,
+        1,
+        10,
+        "well_argued",
+    )
+    assert body["items"][0]["counts"] == {"like": 4, "spoiler": 0, "well_argued": 9}
+    assert body["items"][0]["viewer_interactions"] == ["well_argued"]
+    review_service.list.assert_called_once_with(
+        MOVIE_ID, sort=ReviewSort.WELL_ARGUED, page=1, page_size=10, visitor_id=None
+    )
+
+
+@pytest.mark.parametrize("sort", list(ReviewSort))
+def test_list_reviews_forwards_query_and_visitor(client, review_service, review, sort):
+    review_service.list.return_value = list_response(
+        review, sort=sort, page=2, page_size=50
+    )
+    response = client.get(
+        f"{LIST}?sort={sort}&page=2&page_size=50",
+        headers={"X-Visitor-Id": " 550e8400-e29b-41d4-a716-446655440000 "},
+    )
+    assert response.status_code == 200
+    assert response.json()["sort"] == sort
+    review_service.list.assert_called_once_with(
+        MOVIE_ID,
+        sort=sort,
+        page=2,
+        page_size=50,
+        visitor_id="550e8400-e29b-41d4-a716-446655440000",
+    )
+
+
+def test_blank_visitor_header_is_ignored(client, review_service, review):
+    review_service.list.return_value = list_response(review)
+    client.get(LIST, headers={"X-Visitor-Id": "   "})
+    assert review_service.list.call_args.kwargs["visitor_id"] is None
+
+
+def test_list_empty_movie_returns_200(client, review_service):
+    review_service.list.return_value = ReviewListResponse(
+        items=[], total=0, page=1, page_size=10, sort=ReviewSort.WELL_ARGUED
+    )
+    response = client.get("/api/v1/movies/tt9999999/reviews")
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 10,
+        "sort": "well_argued",
+    }
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "sort=oldest",
+        "sort=WELL_ARGUED",
+        "page=0",
+        "page=-1",
+        "page=abc",
+        "page_size=0",
+        "page_size=51",
+        "page_size=1.5",
+    ],
+)
+def test_invalid_query_returns_400(client, review_service, query):
+    error = assert_error(client.get(f"{LIST}?{query}"), 400, "BAD_REQUEST")
+    assert error["details"][0]["field"] in {"sort", "page", "page_size"}
+    review_service.list.assert_not_called()
+
+
+def test_too_long_visitor_header_returns_400(client, review_service):
+    response = client.get(LIST, headers={"X-Visitor-Id": "x" * 65})
+    error = assert_error(response, 400, "BAD_REQUEST")
+    assert error["details"][0]["field"] == "X-Visitor-Id"
+    review_service.list.assert_not_called()
+
+
+@pytest.mark.parametrize("movie_id", ["abc", "tt123", "catalog:42", "tt12345678901"])
+def test_list_invalid_movie_id_returns_422(client, review_service, movie_id):
+    error = assert_error(
+        client.get(f"/api/v1/movies/{movie_id}/reviews"), 422, "VALIDATION_ERROR"
+    )
+    assert error["message"] == "O movie_id deve ser um imdbID válido (ex.: tt0133093)."
+    review_service.list.assert_not_called()

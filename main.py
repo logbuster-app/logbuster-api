@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from controllers.review import router as review_router
+from dependencies.visitor import VISITOR_HEADER
 from domain.schemas.errors import ErrorResponse
 from utils.error_handlers import register_error_handlers
 
@@ -42,8 +43,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", VISITOR_HEADER],
     max_age=600,
 )
 app.include_router(review_router)

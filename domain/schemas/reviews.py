@@ -12,11 +12,13 @@ from pydantic import (
     field_validator,
 )
 
-from domain.enums import Highlight, ReviewInteractionType
+from domain.enums import Highlight, ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from domain.schemas.movies import ImdbId
 
 MAX_HIGHLIGHTS = 2
+MAX_PAGE_SIZE = 50
+DEFAULT_PAGE_SIZE = 10
 
 Rating = Annotated[
     float,
@@ -120,3 +122,24 @@ class ReviewResponse(BaseModel):
             viewer_interactions=sorted(viewer_interactions),
             created_at=review.created_at,
         )
+
+
+class ReviewListQuery(BaseModel):
+    """Parâmetros de `GET /api/v1/movies/{movie_id}/reviews` (SPEC-BACK-02)."""
+
+    movie_id: ImdbId
+    sort: ReviewSort = ReviewSort.WELL_ARGUED
+    page: Annotated[int, Field(ge=1)] = 1
+    page_size: Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+
+class ReviewListResponse(BaseModel):
+    items: list[ReviewResponse]
+    total: Annotated[int, Field(ge=0)]
+    page: Annotated[int, Field(ge=1)]
+    page_size: Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE)]
+    sort: ReviewSort

@@ -1,10 +1,13 @@
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from domain.enums import Highlight
+from domain.enums import Highlight, ReviewInteractionType, ReviewSort
+from domain.models.review import Review
 from domain.schemas.reviews import ReviewCreate, ReviewResponse
+from repositories.review import ReviewWithCounts
 from services.review import ReviewService
 
 MOVIE_ID = "tt0133093"
@@ -120,3 +123,114 @@ def test_invalid_movie_identifier(review_repository, movie_id):
     with pytest.raises(ValidationError):
         ReviewService(review_repository).rating(movie_id)
     review_repository.rating.assert_not_called()
+
+
+def row(review, like=0, spoiler=0, well_argued=0):
+    return ReviewWithCounts(review, like, spoiler, well_argued)
+
+
+def test_list_uses_default_sort_and_pagination(review_repository, review):
+    review_repository.list_with_counts.return_value = [row(review, 4, 1, 9)]
+    review_repository.count.return_value = 1
+
+    result = ReviewService(review_repository).list(MOVIE_ID)
+
+    review_repository.list_with_counts.assert_called_once_with(
+        MOVIE_ID, sort=ReviewSort.WELL_ARGUED, limit=10, offset=0
+    )
+    review_repository.count.assert_called_once_with(MOVIE_ID)
+    review_repository.viewer_interactions.assert_not_called()
+    assert (result.total, result.page, result.page_size, result.sort) == (
+        1,
+        1,
+        10,
+        ReviewSort.WELL_ARGUED,
+    )
+    (item,) = result.items
+    assert item.id == review.id
+    assert item.counts.model_dump() == {"like": 4, "spoiler": 1, "well_argued": 9}
+    assert item.viewer_interactions == []
+
+
+@pytest.mark.parametrize(
+    "page,page_size,offset", [(1, 10, 0), (2, 10, 10), (3, 25, 50), (1, 50, 0)]
+)
+def test_list_converts_page_to_offset(review_repository, page, page_size, offset):
+    review_repository.list_with_counts.return_value = []
+    review_repository.count.return_value = 0
+    ReviewService(review_repository).list(
+        MOVIE_ID, sort=ReviewSort.NEWEST, page=page, page_size=page_size
+    )
+    review_repository.list_with_counts.assert_called_once_with(
+        MOVIE_ID, sort=ReviewSort.NEWEST, limit=page_size, offset=offset
+    )
+
+
+def test_list_preserves_repository_order(review_repository, review):
+    first = review
+    second = Review(**{**_columns(review), "id": uuid4()})
+    third = Review(**{**_columns(review), "id": uuid4()})
+    review_repository.list_with_counts.return_value = [
+        row(second, well_argued=8),
+        row(third, well_argued=3),
+        row(first, well_argued=1),
+    ]
+    review_repository.count.return_value = 3
+    result = ReviewService(review_repository).list(MOVIE_ID)
+    assert [item.counts.well_argued for item in result.items] == [8, 3, 1]
+    assert [item.id for item in result.items] == [second.id, third.id, first.id]
+
+
+def test_list_empty_movie_returns_empty_page(review_repository):
+    review_repository.list_with_counts.return_value = []
+    review_repository.count.return_value = 0
+    result = ReviewService(review_repository).list(MOVIE_ID, visitor_id="v1")
+    assert result.model_dump() == {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 10,
+        "sort": "well_argued",
+    }
+    review_repository.viewer_interactions.assert_not_called()
+
+
+def test_list_fills_viewer_interactions_with_visitor(review_repository, review):
+    other = Review(**{**_columns(review), "id": uuid4()})
+    review_repository.list_with_counts.return_value = [row(review), row(other)]
+    review_repository.count.return_value = 2
+    review_repository.viewer_interactions.return_value = {
+        review.id: [ReviewInteractionType.WELL_ARGUED, ReviewInteractionType.LIKE]
+    }
+
+    result = ReviewService(review_repository).list(MOVIE_ID, visitor_id="v1")
+
+    review_repository.viewer_interactions.assert_called_once_with(
+        [review.id, other.id], "v1"
+    )
+    assert result.items[0].viewer_interactions == ["like", "well_argued"]
+    assert result.items[1].viewer_interactions == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"page": 0},
+        {"page_size": 0},
+        {"page_size": 51},
+        {"sort": "oldest"},
+        {"movie_id": "catalog:42"},
+    ],
+)
+def test_list_validates_parameters(review_repository, kwargs):
+    params = {"movie_id": MOVIE_ID, **kwargs}
+    movie_id = params.pop("movie_id")
+    with pytest.raises(ValidationError):
+        ReviewService(review_repository).list(movie_id, **params)
+    review_repository.list_with_counts.assert_not_called()
+
+
+def _columns(review):
+    return {
+        column.key: getattr(review, column.key) for column in Review.__table__.columns
+    }

@@ -171,3 +171,19 @@ def test_viewer_interactions_groups_by_review(session):
 def test_viewer_interactions_without_reviews_skips_query(session):
     assert ReviewRepository(session).viewer_interactions([], "v1") == {}
     session.execute.assert_not_called()
+
+
+def test_get_with_counts_filters_by_id_in_subquery_and_outer_query(session, review):
+    session.execute.return_value.first.return_value = (review, 4, 0, 9)
+    result = ReviewRepository(session).get_with_counts(review.id)
+    assert result == ReviewWithCounts(review, like=4, spoiler=0, well_argued=9)
+    sql, params = compile_last_execute(session)
+    assert sql.count("WHERE reviews.id = %(id_1)s") == 2
+    assert params["id_1"] == review.id
+    assert "LEFT OUTER JOIN (SELECT review_interactions.review_id" in sql
+    assert "ORDER BY" not in sql and "LIMIT" not in sql
+
+
+def test_get_with_counts_missing_returns_none(session):
+    session.execute.return_value.first.return_value = None
+    assert ReviewRepository(session).get_with_counts(uuid4()) is None

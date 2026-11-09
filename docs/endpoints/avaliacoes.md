@@ -122,3 +122,31 @@ curl "http://localhost:8000/api/v1/movies/tt0133093/reviews?sort=most_liked&page
 ```
 
 Um filme sem avaliações retorna `200` com `items: []` e `total: 0`, nunca `404`.
+
+## `GET /api/v1/reviews/{review_id}` — consultar avaliação (`BACK-03`)
+
+SPEC: [SPEC-BACK-03](https://github.com/logbuster-app/logbuster-docs/blob/main/docs/specs/back/SPEC-BACK-03-get-avaliacao-especifica.md)
+
+| Parâmetro | Onde | Regra |
+| --- | --- | --- |
+| `review_id` | path | UUID da avaliação (`422` se malformado) |
+| `X-Visitor-Id` | header | Opcional, até 64 caracteres (`400` se maior). Preenche `viewer_interactions` |
+
+```bash
+curl http://localhost:8000/api/v1/reviews/c4f7d9d2-9d4e-4b3a-8f55-1f2e3d4c5b6a \
+  -H "X-Visitor-Id: 550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Respostas**
+- `200 OK`: o `ReviewResponse` completo, com os contadores atualizados. É o mesmo formato de item do `POST` e da listagem.
+- `404 NOT_FOUND`: não existe avaliação com esse `review_id`.
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Avaliação não encontrada.",
+    "details": []
+  }
+}
+```

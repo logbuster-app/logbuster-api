@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
@@ -86,6 +87,28 @@ def list_reviews(
     return service.list(
         movie_id, sort=sort, page=page, page_size=page_size, visitor_id=visitor_id
     )
+
+
+@router.get(
+    "/reviews/{review_id}",
+    response_model=ReviewResponse,
+    summary="Consultar avaliação",
+    description=(
+        "Retorna os dados e os contadores atualizados de uma avaliação, no mesmo "
+        "formato de item da listagem. Com X-Visitor-Id, viewer_interactions traz "
+        "os votos já marcados por aquele visitante."
+    ),
+    responses={
+        **BAD_REQUEST_RESPONSE,
+        404: {"model": ErrorResponse, "description": "Avaliação não encontrada"},
+    },
+)
+def get_review(
+    review_id: Annotated[UUID, Path(description="UUID da avaliação.")],
+    service: ReviewServiceDep,
+    visitor_id: OptionalVisitorIdDep,
+) -> ReviewResponse:
+    return service.get(review_id, visitor_id=visitor_id)
 
 
 @router.get(

@@ -17,6 +17,7 @@ logger = logging.getLogger("uvicorn.error")
 # Mensagem em português para o primeiro campo inválido (SPEC-API-00, §4.3).
 FIELD_MESSAGES = {
     "movie_id": "O movie_id deve ser um imdbID válido (ex.: tt0133093).",
+    "review_id": "O review_id deve ser um UUID válido.",
     "author_name": "O nome do autor deve ter entre 2 e 50 caracteres.",
     "rating": "A nota deve estar entre 0.5 e 5.0 em passos de 0.5.",
     "content": "A descrição deve ter entre 10 e 2000 caracteres.",

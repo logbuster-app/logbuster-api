@@ -41,4 +41,5 @@ Para ler esta documentação localmente: `npx docsify-cli serve docs`.
 | --- | --- | --- |
 | `BACK-01` | `POST /api/v1/reviews` | Implementado |
 | `BACK-02` | `GET /api/v1/movies/{movie_id}/reviews` | Implementado |
+| `BACK-03` | `GET /api/v1/reviews/{review_id}` | Implementado |
 | `BACK-05` | `GET /api/v1/movies/{movie_id}/rating` | Versão inicial (contrato ainda será alinhado à SPEC) |

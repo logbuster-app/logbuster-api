@@ -96,6 +96,11 @@ class ReviewRepository:
     def get(self, review_id: UUID) -> Review | None:
         return self.session.get(Review, review_id)
 
+    def get_with_counts(self, review_id: UUID) -> ReviewWithCounts | None:
+        statement, _counts = _select_with_counts(Review.id == review_id)
+        row = self.session.execute(statement).first()
+        return ReviewWithCounts(*row) if row is not None else None
+
     def list_with_counts(
         self, movie_id: str, *, sort: ReviewSort, limit: int, offset: int
     ) -> list[ReviewWithCounts]:

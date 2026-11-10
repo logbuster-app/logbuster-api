@@ -11,7 +11,7 @@
 Usamos o `mise` (https://mise.jdx.dev/) para gerenciar o ambiente de desenvolvimento.
 Para configurar o ambiente, instale o `mise` seguindo as instruções da sua [documentação](https://mise.jdx.dev/getting-started.html).
 
-Para acessar o banco de dados do projeto, é necessário ter as credenciais e o acesso à rede configurados. Veja as instruções detalhadas em [SETUP_LINK](<!-- TODO: adicionar link -->).
+Configure um banco PostgreSQL e defina `DATABASE_URL` usando o driver `postgresql+psycopg`.
 
 Com o `mise` instalado, use seu terminal preferido (recomendamos o Git Bash no Windows) para entrar com `cd` na pasta raiz deste repositório. Em seguida, execute:
 
@@ -23,11 +23,11 @@ Pronto. Não é preciso instalar Python nem outras dependências, o `mise` cuida
 
 ### Defina as variáveis de ambiente
 
-Crie um arquivo `.env` com as variáveis de ambiente necessárias (veja o [.env.example](<!-- TODO: adicionar link para o .env.example -->)).
+Crie um arquivo `.env` com as variáveis de ambiente necessárias (veja o [.env.example](.env.example)).
 
 ### Execute o servidor
 
-Certifique-se de que o `.env` siga a mesma estrutura do `.env.example`. Copiar o arquivo de exemplo deve bastar. Na pasta raiz do repositório, execute:
+Copie `.env.example` para `.env`, configure o PostgreSQL e a chave da OMDb e execute `uv run alembic upgrade head` para criar as tabelas. Na pasta raiz do repositório, execute:
 
 ```
 mise start
@@ -35,7 +35,7 @@ mise start
 
 ### Execute os testes
 
-Os testes usam mocks e não exigem PostgreSQL ou Docker:
+Os testes não exigem PostgreSQL ou Docker:
 
 ```
 mise test
@@ -52,4 +52,12 @@ Embora o `mise` forneça tarefas e instale ferramentas, a execução do código 
 
 ## Documentação
 
-Com o servidor em execução, é possível acessar a [documentação da API](http://localhost:<PORT>/<!-- TODO: caminho da documentação -->).
+Com o servidor em execução, é possível acessar a [documentação da API](http://localhost:8000/api/docs). O guia em Docsify está em [docs](docs/README.md).
+
+### Busca de filmes
+
+Configure `OMDB_API_KEY` e, opcionalmente, `OMDB_BASE_URL` no ambiente. A rota
+`GET /api/v1/movies?q=Matrix&page=1` consulta a OMDb e inclui `rating_avg` e
+`rating_count` calculados a partir das avaliações locais. A busca requer banco
+configurado; a chave da OMDb permanece no servidor. `GET /health` verifica se o
+processo da API está respondendo.

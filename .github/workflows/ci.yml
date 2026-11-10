@@ -36,4 +36,4 @@ jobs:
       - name: Conferir formatação
         run: uv run --frozen ruff format --check .
       - name: Testes mockados
-        run: uv run --frozen pytest
+        run: uv run --frozen pytest --cov=controllers --cov=services --cov=repositories --cov=domain --cov=dependencies --cov=utils --cov=main --cov=config --cov-fail-under=80

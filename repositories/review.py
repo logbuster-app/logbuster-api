@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Sequence
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 from uuid import UUID
 
@@ -128,6 +128,26 @@ class ReviewRepository:
     def count(self, movie_id: str) -> int:
         statement = select(func.count(Review.id)).where(Review.movie_id == movie_id)
         return self.session.scalar(statement) or 0
+
+    def ratings_map(self, movie_ids: list[str]) -> dict[str, tuple[float, int]]:
+        if not movie_ids:
+            return {}
+        statement = (
+            select(Review.movie_id, func.avg(Review.rating), func.count(Review.id))
+            .where(Review.movie_id.in_(movie_ids))
+            .group_by(Review.movie_id)
+        )
+        return {
+            movie_id: (
+                float(
+                    Decimal(str(average)).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                ),
+                count,
+            )
+            for movie_id, average, count in self.session.execute(statement)
+        }
 
     def rating(self, movie_id: str) -> tuple[Decimal | None, int]:
         statement = select(func.avg(Review.rating), func.count(Review.id)).where(

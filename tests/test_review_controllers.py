@@ -185,8 +185,8 @@ def test_movie_rating_response(client, review_service, average, count):
     assert response.status_code == 200
     assert response.json() == {
         "movie_id": MOVIE_ID,
-        "average_rating": average,
-        "reviews_count": count,
+        "rating_avg": average,
+        "rating_count": count,
     }
     review_service.rating.assert_called_once_with(MOVIE_ID)
 
@@ -217,6 +217,9 @@ def test_docs_and_openapi_document_contract(client):
         (path, method) for path, value in schema["paths"].items() for method in value
     }
     assert operations == {
+        ("/health", "get"),
+        ("/api/v1/movies", "get"),
+        ("/api/v1/movies/{movie_id}", "get"),
         ("/api/v1/reviews", "post"),
         ("/api/v1/movies/{movie_id}/reviews", "get"),
         ("/api/v1/reviews/{review_id}", "get"),
@@ -244,7 +247,7 @@ def test_docs_and_openapi_document_contract(client):
         "$ref": "#/components/schemas/ErrorResponse"
     }
     rating_schema = schema["components"]["schemas"]["MovieRating"]
-    assert {"type": "null"} in rating_schema["properties"]["average_rating"]["anyOf"]
+    assert {"type": "null"} in rating_schema["properties"]["rating_avg"]["anyOf"]
 
 
 def test_configured_cors_preflight(client):

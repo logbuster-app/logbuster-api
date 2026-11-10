@@ -21,7 +21,8 @@ class MovieRating(BaseModel):
         Field(
             ge=0.5,
             le=5,
+            serialization_alias="rating_avg",
             description="Média arredondada a duas casas decimais; null sem avaliações.",
         ),
     ]
-    reviews_count: Annotated[int, Field(ge=0)]
+    reviews_count: Annotated[int, Field(ge=0, serialization_alias="rating_count")]

@@ -117,8 +117,8 @@ def get_review(
     summary="Consultar nota média do filme",
     description=(
         "Média calculada no banco e arredondada a duas casas decimais. "
-        "Sem avaliações, retorna average_rating: null e reviews_count: 0."
+        "Sem avaliações, retorna rating_avg: null e rating_count: 0."
     ),
 )
-def get_rating(movie_id: MovieId, service: ReviewServiceDep) -> MovieRating:
+def get_rating(movie_id: ImdbMovieId, service: ReviewServiceDep) -> MovieRating:
     return service.rating(movie_id)

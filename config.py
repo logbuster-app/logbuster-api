@@ -18,6 +18,14 @@ class Settings:
         return os.getenv("OMDB_BASE_URL", "https://www.omdbapi.com")
 
     @property
+    def jwt_secret(self) -> str:
+        return os.getenv("JWT_SECRET", "")
+
+    @property
+    def jwt_expires_in(self) -> int:
+        return int(os.getenv("JWT_EXPIRES_IN", "3600"))
+
+    @property
     def app_env(self) -> str:
         return os.getenv("APP_ENV", "development")
 

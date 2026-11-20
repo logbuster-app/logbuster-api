@@ -15,11 +15,15 @@ Toda resposta de erro segue o envelope da [SPEC-API-00](https://github.com/logbu
 | HTTP | `error.code` | Quando |
 | --- | --- | --- |
 | `400` | `BAD_REQUEST` | Query string ou header inválido |
+| `401` | `UNAUTHORIZED` | Credenciais inválidas ou token ausente em rota privada, inválido ou vencido |
 | `404` | `NOT_FOUND` | Recurso inexistente (ex.: `review_id`) ou rota desconhecida |
 | `405` | `METHOD_NOT_ALLOWED` | Método HTTP não suportado na rota |
-| `422` | `VALIDATION_ERROR` | Corpo ou parâmetro de path viola as regras de domínio |
+| `409` | `CONFLICT` | E-mail já cadastrado |
+| `413` | `PAYLOAD_TOO_LARGE` | Imagem de perfil acima do limite de bytes ou dimensões |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | Tipo de imagem do perfil ausente, não aceito ou incompatível com o arquivo |
+| `422` | `VALIDATION_ERROR` | Corpo, parâmetro de path ou paginação do histórico público viola as regras de domínio |
 | `500` | `INTERNAL_ERROR` | Erro inesperado (nada interno vaza para o cliente nem para o log) |
-| `503` | `SERVICE_UNAVAILABLE` | Banco indisponível ou `DATABASE_URL` ausente ou inválida |
+| `503` | `SERVICE_UNAVAILABLE` | Banco indisponível ou configuração de banco ou autenticação ausente ou inválida |
 
 - `message` vem em português e se refere ao primeiro campo inválido.
 - `details` lista todos os problemas encontrados: `field` é o caminho do campo (ex.: `highlights.2`) e `issue` é a descrição técnica.

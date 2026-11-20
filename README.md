@@ -24,6 +24,8 @@ Pronto. Não é preciso instalar Python nem outras dependências, o `mise` cuida
 ### Defina as variáveis de ambiente
 
 Crie um arquivo `.env` com as variáveis de ambiente necessárias (veja o [.env.example](.env.example)).
+Para habilitar login por JWT, configure `JWT_SECRET` com uma chave aleatória de pelo menos 32 bytes
+(por exemplo, gerada com `openssl rand -hex 32`). `JWT_EXPIRES_IN` é opcional e vale 3600 segundos por padrão.
 
 ### Execute o servidor
 

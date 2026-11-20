@@ -225,6 +225,16 @@ def test_docs_and_openapi_document_contract(client):
         ("/api/v1/reviews/{review_id}", "get"),
         ("/api/v1/reviews/{review_id}/interactions", "post"),
         ("/api/v1/movies/{movie_id}/rating", "get"),
+        ("/api/v1/auth/register", "post"),
+        ("/api/v1/auth/login", "post"),
+        ("/api/v1/auth/me", "get"),
+        ("/api/v1/users/{user_id}", "get"),
+        ("/api/v1/users/{user_id}/reviews", "get"),
+        ("/api/v1/avatars", "get"),
+        ("/api/v1/users/me", "patch"),
+        ("/api/v1/users/me/images/{kind}", "put"),
+        ("/api/v1/users/me/images/{kind}", "delete"),
+        ("/api/v1/users/{user_id}/images/{kind}/{version}", "get"),
     }
     detail = schema["paths"]["/api/v1/reviews/{review_id}"]["get"]
     assert set(detail["responses"]) >= {"200", "400", "404", "422"}

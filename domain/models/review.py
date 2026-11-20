@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Numeric,
     String,
@@ -35,6 +36,7 @@ class Review(Base):
         ),
         CheckConstraint("cardinality(highlights) <= 2", name="ck_reviews_highlights"),
         Index("ix_reviews_movie_created_id", "movie_id", "created_at", "id"),
+        Index("ix_reviews_user_created_id", "user_id", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -52,4 +54,8 @@ class Review(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_reviews_user_id"),
     )

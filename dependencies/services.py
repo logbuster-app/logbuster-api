@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from dependencies.session import get_session
 from repositories.interaction import InteractionRepository
 from repositories.review import ReviewRepository
+from repositories.user import UserRepository
 from services.interaction import InteractionService
 from services.review import ReviewService
+from services.user import UserService
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -18,3 +20,7 @@ def get_review_service(session: SessionDep) -> ReviewService:
 
 def get_interaction_service(session: SessionDep) -> InteractionService:
     return InteractionService(ReviewRepository(session), InteractionRepository(session))
+
+
+def get_user_service(session: SessionDep) -> UserService:
+    return UserService(UserRepository(session))

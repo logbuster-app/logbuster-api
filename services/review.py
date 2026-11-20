@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 
 from domain.enums import ReviewInteractionType, ReviewSort
 from domain.errors.reviews import ReviewNotFoundError
+from domain.errors.users import UnauthorizedError
 from domain.models.review import Review
 from domain.schemas.movies import Identifier, MovieRating
 from domain.schemas.reviews import (
@@ -15,6 +16,9 @@ from domain.schemas.reviews import (
     ReviewListQuery,
     ReviewListResponse,
     ReviewResponse,
+    ReviewSubmission,
+    UserReviewListQuery,
+    UserReviewListResponse,
 )
 from repositories.review import ReviewRepository, ReviewWithCounts
 
@@ -25,11 +29,14 @@ class ReviewService:
     def __init__(self, repository: ReviewRepository) -> None:
         self.repository = repository
 
-    def create(self, payload: ReviewCreate) -> ReviewResponse:
+    def create(
+        self, payload: ReviewCreate, *, user_id: UUID | None = None
+    ) -> ReviewResponse:
         payload = ReviewCreate.model_validate(payload)
         review = Review(
             movie_id=payload.movie_id,
             author_name=payload.author_name,
+            user_id=user_id,
             # Decimal a partir do texto evita ruído binário de float no Numeric.
             rating=Decimal(str(payload.rating)),
             content=payload.content,
@@ -38,6 +45,30 @@ class ReviewService:
         )
         # Recém-criada: contadores zerados e nenhum voto do visitante (RN-05).
         return ReviewResponse.from_model(self.repository.create(review))
+
+    def create_for_user(
+        self, payload: ReviewSubmission, user_id: UUID
+    ) -> ReviewResponse:
+        author = self.repository.get_author(user_id)
+        if author is None:
+            raise UnauthorizedError()
+        review = ReviewCreate.model_validate(
+            {**payload.model_dump(), "author_name": author.display_name}
+        )
+        return self.create(review, user_id=author.id)
+
+    def list_for_user(
+        self, user_id: UUID, query: UserReviewListQuery
+    ) -> UserReviewListResponse:
+        rows = self.repository.list_for_user(
+            user_id, limit=query.page_size, offset=query.offset
+        )
+        return UserReviewListResponse(
+            items=[self._to_response(row, []) for row in rows],
+            total=self.repository.count_for_user(user_id),
+            page=query.page,
+            page_size=query.page_size,
+        )
 
     def list(
         self,

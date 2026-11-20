@@ -39,8 +39,8 @@ Content = Annotated[
 ]
 
 
-class ReviewCreate(BaseModel):
-    """Payload de `POST /api/v1/reviews` (SPEC-BACK-01)."""
+class ReviewSubmission(BaseModel):
+    """Payload de publicação com ou sem autenticação (SPEC-BACK-08)."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -62,7 +62,7 @@ class ReviewCreate(BaseModel):
     )
 
     movie_id: ImdbId
-    author_name: AuthorName
+    author_name: AuthorName | None = None
     rating: Rating
     content: Content
     is_spoiler: Annotated[bool, Field(strict=True)] = False
@@ -76,6 +76,10 @@ class ReviewCreate(BaseModel):
         if len(set(value)) != len(value):
             raise ValueError("Os destaques não podem se repetir.")
         return value
+
+
+class ReviewCreate(ReviewSubmission):
+    author_name: AuthorName
 
 
 class ReviewCounts(BaseModel):
@@ -137,9 +141,21 @@ class ReviewListQuery(BaseModel):
         return (self.page - 1) * self.page_size
 
 
-class ReviewListResponse(BaseModel):
+class UserReviewListQuery(BaseModel):
+    page: Annotated[int, Field(ge=1)] = 1
+    page_size: Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+
+class UserReviewListResponse(BaseModel):
     items: list[ReviewResponse]
     total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
     page_size: Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE)]
+
+
+class ReviewListResponse(UserReviewListResponse):
     sort: ReviewSort

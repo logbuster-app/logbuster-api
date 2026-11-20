@@ -21,12 +21,9 @@ from domain.schemas.reviews import ReviewResponse
 from utils.database import Base
 
 
-def load_initial_migration():
-    path = (
-        Path(__file__).parents[1]
-        / "alembic/versions/0001_create_reviews_and_review_interactions.py"
-    )
-    spec = importlib.util.spec_from_file_location("initial_migration", path)
+def load_migration(filename):
+    path = Path(__file__).parents[1] / "alembic/versions" / filename
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -90,20 +87,37 @@ def test_migration_matches_models_without_database():
         Index(name, *(table.c[col] for col in columns))
 
     operations.create_index.side_effect = create_index
-    migration = load_initial_migration()
-    with patch.object(migration, "op", operations):
-        migration.upgrade()
+    operations.add_column.side_effect = lambda name, column: metadata.tables[
+        name
+    ].append_column(column)
+
+    def create_foreign_key(name, source, target, local, remote, **kwargs):
+        metadata.tables[source].append_constraint(
+            ForeignKeyConstraint(
+                local, [f"{target}.{column}" for column in remote], name=name, **kwargs
+            )
+        )
+
+    operations.create_foreign_key.side_effect = create_foreign_key
+    initial = load_migration("0001_create_reviews_and_review_interactions.py")
+    ownership = load_migration("0002_add_users_and_review_ownership.py")
+    images = load_migration("0003_create_profile_images.py")
+    for migration in (initial, ownership, images):
+        with patch.object(migration, "op", operations):
+            migration.upgrade()
+    assert ownership.down_revision == initial.revision
+    assert images.down_revision == ownership.revision
     assert (
         set(metadata.tables)
         == set(Base.metadata.tables)
-        == {"reviews", "review_interactions"}
+        == {"reviews", "review_interactions", "users", "profile_images"}
     )
     for name, table in metadata.tables.items():
         assert table_signature(table) == table_signature(Base.metadata.tables[name])
 
 
 def test_migration_downgrade_removes_indexes_and_tables():
-    migration = load_initial_migration()
+    migration = load_migration("0001_create_reviews_and_review_interactions.py")
     with patch.object(migration, "op") as operations:
         migration.downgrade()
     assert [call.args[0] for call in operations.drop_table.call_args_list] == [

@@ -3,3 +3,4 @@
 - [Padrão de erros](erros.md)
 - Endpoints
   - [Avaliações](endpoints/avaliacoes.md)
+  - [Contas e perfis](endpoints/contas-e-perfis.md)

@@ -65,15 +65,25 @@ def _validation_details(errors: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
-    return error_response(exc.status_code, exc.code, exc.message, exc.details)
+    headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
+    return error_response(exc.status_code, exc.code, exc.message, exc.details, headers)
 
 
 async def validation_error_handler(
-    _request: Request, exc: RequestValidationError
+    request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     errors = list(exc.errors())
     first_location = errors[0].get("loc", ()) if errors else ()
-    if first_location and first_location[0] in BAD_REQUEST_LOCATIONS:
+    # A SPEC-BACK-08 usa 422 para paginação inválida no histórico público.
+    invalid_history_page = (
+        first_location[:1] == ("query",)
+        and getattr(request.scope.get("route"), "name", None) == "list_user_reviews"
+    )
+    if (
+        first_location
+        and first_location[0] in BAD_REQUEST_LOCATIONS
+        and not invalid_history_page
+    ):
         status_code, code, message = 400, "BAD_REQUEST", DEFAULT_BAD_REQUEST_MESSAGE
     else:
         status_code, code = 422, "VALIDATION_ERROR"

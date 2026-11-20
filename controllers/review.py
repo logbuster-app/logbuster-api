@@ -2,7 +2,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi.exceptions import RequestValidationError
 
+from dependencies.auth import OptionalUserId
 from dependencies.services import get_review_service
 from dependencies.visitor import OptionalVisitorIdDep
 from domain.enums import ReviewSort
@@ -14,6 +16,7 @@ from domain.schemas.reviews import (
     ReviewCreate,
     ReviewListResponse,
     ReviewResponse,
+    ReviewSubmission,
 )
 from services.review import ReviewService
 
@@ -54,12 +57,25 @@ BAD_REQUEST_RESPONSE = {
     summary="Cadastrar avaliação",
     description=(
         "Cria uma avaliação com estrelas de 0.5 a 5.0 (passos de 0.5), descrição, "
-        "nome do autor, flag provisória de spoiler e até 2 destaques únicos. "
-        "A avaliação nasce com contadores de interação zerados."
+        "flag de spoiler e até 2 destaques únicos. Sem autenticação, author_name "
+        "é obrigatório. Com um token Bearer válido, a avaliação é vinculada à conta "
+        "e usa o nome de exibição do titular."
     ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Token inválido ou expirado"}
+    },
+    openapi_extra={"security": [{}]},
 )
-def create_review(payload: ReviewCreate, service: ReviewServiceDep) -> ReviewResponse:
-    return service.create(payload)
+def create_review(
+    payload: ReviewSubmission, user_id: OptionalUserId, service: ReviewServiceDep
+) -> ReviewResponse:
+    if user_id is not None:
+        return service.create_for_user(payload, user_id)
+    if payload.author_name is None:
+        raise RequestValidationError(
+            [{"loc": ("body", "author_name"), "msg": "Campo obrigatório sem login."}]
+        )
+    return service.create(ReviewCreate.model_validate(payload.model_dump()))
 
 
 @router.get(

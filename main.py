@@ -9,6 +9,7 @@ from config import settings
 from controllers.interaction import router as interaction_router
 from controllers.movies import router as movies_router
 from controllers.review import router as review_router
+from controllers.users import router as users_router
 from dependencies.visitor import VISITOR_HEADER
 from domain.schemas.errors import ErrorResponse
 from utils.error_handlers import register_error_handlers
@@ -27,9 +28,9 @@ app = FastAPI(
     title="Logbuster API",
     version="0.1.0",
     description=(
-        "API de avaliações de filmes do LogBuster. Sem login na entrega parcial: "
-        "o autor informa author_name e o visitante é identificado pelo header "
-        "X-Visitor-Id. Erros seguem o envelope {error: {code, message, details}}."
+        "API de avaliações de filmes do LogBuster com login opcional. "
+        "Visitantes informam author_name ao avaliar e usam X-Visitor-Id para votar. "
+        "Erros seguem o envelope {error: {code, message, details}}."
     ),
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
@@ -45,13 +46,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", VISITOR_HEADER],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", VISITOR_HEADER],
     max_age=600,
 )
 app.include_router(movies_router)
 app.include_router(review_router)
 app.include_router(interaction_router)
+app.include_router(users_router)
 register_error_handlers(app)
 
 

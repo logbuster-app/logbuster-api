@@ -44,3 +44,4 @@ Para ler esta documentação localmente: `npx docsify-cli serve docs`.
 | `BACK-03` | `GET /api/v1/reviews/{review_id}` | Implementado |
 | `BACK-06` | `POST /api/v1/reviews/{review_id}/interactions` | Implementado |
 | `BACK-05` | `GET /api/v1/movies/{movie_id}/rating` | Versão inicial (contrato ainda será alinhado à SPEC) |
+| `BACK-08` | [Autenticação, perfis públicos e histórico](endpoints/contas-e-perfis.md) | Implementado |

@@ -28,3 +28,8 @@ class ReviewSort(StrEnum):
     NEWEST = "newest"
     RATING_DESC = "rating_desc"
     RATING_ASC = "rating_asc"
+
+
+class ProfileImageKind(StrEnum):
+    AVATAR = "avatar"
+    BACKGROUND = "background"

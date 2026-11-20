@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from domain.enums import ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from domain.models.review_interaction import ReviewInteraction
+from domain.models.user import User
 
 
 class ReviewWithCounts(NamedTuple):
@@ -96,6 +97,9 @@ class ReviewRepository:
     def get(self, review_id: UUID) -> Review | None:
         return self.session.get(Review, review_id)
 
+    def get_author(self, user_id: UUID) -> User | None:
+        return self.session.get(User, user_id)
+
     def get_with_counts(self, review_id: UUID) -> ReviewWithCounts | None:
         statement, _counts = _select_with_counts(Review.id == review_id)
         row = self.session.execute(statement).first()
@@ -109,6 +113,21 @@ class ReviewRepository:
             statement.order_by(*_order_by(sort, counts)).limit(limit).offset(offset)
         )
         return [ReviewWithCounts(*row) for row in self.session.execute(statement)]
+
+    def list_for_user(
+        self, user_id: UUID, *, limit: int, offset: int
+    ) -> list[ReviewWithCounts]:
+        statement, counts = _select_with_counts(Review.user_id == user_id)
+        statement = (
+            statement.order_by(*_order_by(ReviewSort.NEWEST, counts))
+            .limit(limit)
+            .offset(offset)
+        )
+        return [ReviewWithCounts(*row) for row in self.session.execute(statement)]
+
+    def count_for_user(self, user_id: UUID) -> int:
+        statement = select(func.count(Review.id)).where(Review.user_id == user_id)
+        return self.session.scalar(statement) or 0
 
     def viewer_interactions(
         self, review_ids: Sequence[UUID], visitor_id: str

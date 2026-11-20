@@ -30,13 +30,15 @@ SPEC: [SPEC-BACK-01](https://github.com/logbuster-app/logbuster-docs/blob/main/d
 | Campo | Tipo | Obrigatório | Regra |
 | --- | --- | --- | --- |
 | `movie_id` | string | sim | imdbID, `^tt[0-9]{7,10}$` (ex.: `tt0133093`) |
-| `author_name` | string | sim | De 2 a 50 caracteres, após remover espaços das pontas |
+| `author_name` | string | sem login | De 2 a 50 caracteres, após remover espaços das pontas |
 | `rating` | number | sim | De `0.5` a `5.0`, em passos de `0.5` (`4.3`, `0` e `"4.5"` são rejeitados) |
 | `content` | string | sim | De 10 a 2000 caracteres, após remover espaços das pontas |
 | `is_spoiler` | boolean | não | Padrão `false` |
 | `highlights` | string[] | não | De 0 a 2 valores únicos entre `soundtrack`, `cinematography`, `screenplay`, `acting`, `direction` e `visual_effects` |
 
 Campos não listados acima são rejeitados com `422`.
+
+O login é opcional. Com `Authorization: Bearer <jwt>`, a conta é usada como autora e a avaliação aparece no [histórico do perfil](contas-e-perfis.md). O servidor usa o nome de exibição da conta. Sem token, a publicação usa `author_name` e fica anônima. Um token inválido ou vencido resulta em `401 UNAUTHORIZED`.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/reviews \

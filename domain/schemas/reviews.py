@@ -82,6 +82,28 @@ class ReviewCreate(ReviewSubmission):
     author_name: AuthorName
 
 
+class SpoilerCheckRequest(BaseModel):
+    """Rascunho analisado antes de publicar (SPEC-BACK-09, RN-03).
+
+    O texto segue a mesma validação de `content` da SPEC-BACK-01.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "movie_id": "tt0133093",
+                    "content": "O texto digitado pelo autor no modal de avaliação.",
+                }
+            ]
+        },
+    )
+
+    movie_id: ImdbId
+    content: Content
+
+
 class ReviewCounts(BaseModel):
     like: Annotated[int, Field(ge=0)] = 0
     spoiler: Annotated[int, Field(ge=0)] = 0

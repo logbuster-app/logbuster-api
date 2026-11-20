@@ -30,6 +30,22 @@ class ReviewSort(StrEnum):
     RATING_ASC = "rating_asc"
 
 
+class ReviewSummaryStatus(StrEnum):
+    """Estados do bloco "Resumo da comunidade" (SPEC-BACK-09, §4)."""
+
+    READY = "ready"
+    INSUFFICIENT_REVIEWS = "insufficient_reviews"
+    UNAVAILABLE = "unavailable"
+
+
+class SpoilerCheckStatus(StrEnum):
+    """Resultado da sugestão de spoiler; só `suspected` aciona o aviso."""
+
+    SUSPECTED = "suspected"
+    CLEAR = "clear"
+    UNAVAILABLE = "unavailable"
+
+
 class ProfileImageKind(StrEnum):
     AVATAR = "avatar"
     BACKGROUND = "background"

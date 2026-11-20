@@ -12,6 +12,7 @@ from domain.enums import ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from domain.models.review_interaction import ReviewInteraction
 from domain.models.user import User
+from domain.rules import SPOILER_HIDE_VOTES
 
 
 class ReviewWithCounts(NamedTuple):
@@ -143,6 +144,39 @@ class ReviewRepository:
         for review_id, kind in self.session.execute(statement):
             marked[review_id].append(kind)
         return dict(marked)
+
+    def rows_for_author(self, user_id: UUID) -> list[ReviewWithCounts]:
+        """Todas as avaliações da conta com votos recebidos, para o arquétipo."""
+        statement, _counts = _select_with_counts(Review.user_id == user_id)
+        return [ReviewWithCounts(*row) for row in self.session.execute(statement)]
+
+    def summary_candidates(
+        self, movie_id: str, *, limit: int
+    ) -> list[ReviewWithCounts]:
+        """Avaliações que podem ir para o resumo, mais bem argumentadas primeiro.
+
+        Ficam de fora as marcadas como spoiler pelo autor e as ocultadas pela
+        comunidade com `SPOILER_HIDE_VOTES` votos (SPEC-BACK-09, RN-01).
+        """
+        statement, counts = _select_with_counts(
+            Review.movie_id == movie_id, Review.is_spoiler.is_(False)
+        )
+        statement = (
+            statement.where(counts.spoiler < SPOILER_HIDE_VOTES)
+            .order_by(*_order_by(ReviewSort.WELL_ARGUED, counts))
+            .limit(limit)
+        )
+        return [ReviewWithCounts(*row) for row in self.session.execute(statement)]
+
+    def eligible_ids(self, review_ids: Sequence[UUID]) -> set[UUID]:
+        """Quais dessas avaliações ainda existem e continuam sem spoiler."""
+        if not review_ids:
+            return set()
+        statement, counts = _select_with_counts(
+            Review.id.in_(review_ids), Review.is_spoiler.is_(False)
+        )
+        statement = statement.where(counts.spoiler < SPOILER_HIDE_VOTES)
+        return {row[0].id for row in self.session.execute(statement)}
 
     def count(self, movie_id: str) -> int:
         statement = select(func.count(Review.id)).where(Review.movie_id == movie_id)

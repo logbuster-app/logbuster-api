@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from controllers.ai import router as ai_router
 from controllers.interaction import router as interaction_router
 from controllers.movies import router as movies_router
 from controllers.review import router as review_router
@@ -54,6 +55,7 @@ app.include_router(movies_router)
 app.include_router(review_router)
 app.include_router(interaction_router)
 app.include_router(users_router)
+app.include_router(ai_router)
 register_error_handlers(app)
 
 

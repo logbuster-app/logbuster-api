@@ -51,12 +51,12 @@ class OmdbClient:
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             raise OmdbError from exc
 
-    def get_movie(self, movie_id: str) -> dict:
+    def get_movie(self, movie_id: str, *, timeout: float = 10.0) -> dict:
         try:
             response = httpx.get(
                 settings.omdb_base_url,
                 params={"apikey": settings.omdb_api_key, "i": movie_id, "plot": "full"},
-                timeout=10.0,
+                timeout=timeout,
             )
             response.raise_for_status()
             data = response.json()

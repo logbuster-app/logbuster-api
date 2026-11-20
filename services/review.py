@@ -20,7 +20,9 @@ from domain.schemas.reviews import (
     UserReviewListQuery,
     UserReviewListResponse,
 )
+from domain.schemas.users import Archetype
 from repositories.review import ReviewRepository, ReviewWithCounts
+from services.archetype import ReviewFacts, classify
 
 _identifier = TypeAdapter(Identifier)
 
@@ -69,6 +71,24 @@ class ReviewService:
             page=query.page,
             page_size=query.page_size,
         )
+
+    def archetype(self, user_id: UUID) -> Archetype | None:
+        """Recalculado a cada consulta a partir das avaliações da conta."""
+        result = classify(
+            [
+                ReviewFacts(
+                    rating=float(row.review.rating),
+                    is_spoiler=row.review.is_spoiler,
+                    highlights=row.review.highlights,
+                    spoiler_votes=row.spoiler,
+                    well_argued_votes=row.well_argued,
+                )
+                for row in self.repository.rows_for_author(user_id)
+            ]
+        )
+        if result is None:
+            return None
+        return Archetype(title=result.title, description=result.description)
 
     def list(
         self,

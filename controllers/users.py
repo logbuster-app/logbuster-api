@@ -69,8 +69,11 @@ def get_session(user_id: RequiredUserId, service: UserServiceDep) -> CurrentUser
 @router.get(
     "/users/{user_id}", response_model=PublicProfile, responses=USER_NOT_FOUND_RESPONSE
 )
-def get_profile(user_id: UUID, service: UserServiceDep) -> PublicProfile:
-    return PublicProfile.from_user(service.get_profile(user_id))
+def get_profile(
+    user_id: UUID, service: UserServiceDep, reviews: ReviewServiceDep
+) -> PublicProfile:
+    profile = PublicProfile.from_user(service.get_profile(user_id))
+    return profile.model_copy(update={"archetype": reviews.archetype(user_id)})
 
 
 @router.get(
@@ -97,9 +100,13 @@ def list_avatars() -> AvatarList:
     "/users/me", response_model=PublicProfile, responses=UNAUTHORIZED_RESPONSE
 )
 def update_profile(
-    payload: ProfilePatch, user_id: RequiredUserId, service: UserServiceDep
+    payload: ProfilePatch,
+    user_id: RequiredUserId,
+    service: UserServiceDep,
+    reviews: ReviewServiceDep,
 ) -> PublicProfile:
-    return PublicProfile.from_user(service.update_profile(user_id, payload))
+    profile = PublicProfile.from_user(service.update_profile(user_id, payload))
+    return profile.model_copy(update={"archetype": reviews.archetype(user_id)})
 
 
 @router.put(

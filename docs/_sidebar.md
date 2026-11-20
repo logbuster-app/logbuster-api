@@ -4,3 +4,4 @@
 - Endpoints
   - [Avaliações](endpoints/avaliacoes.md)
   - [Contas e perfis](endpoints/contas-e-perfis.md)
+  - [IA e arquétipo](endpoints/ia.md)

@@ -23,7 +23,7 @@ Para obter e verificar tokens, configure `JWT_SECRET` com uma chave aleatória d
 
 ## Perfil público e histórico
 
-O perfil público contém `user_id`, `display_name`, `created_at`, `bio`, `avatar_id`, `avatar_image_url`, `background_image_url` e `archetype`. O e-mail é retornado só em `/auth/me`. O campo `archetype` retorna `null` até a implementação do cálculo do Back B.
+O perfil público contém `user_id`, `display_name`, `created_at`, `bio`, `avatar_id`, `avatar_image_url`, `background_image_url` e `archetype`. O e-mail é retornado só em `/auth/me`. O campo `archetype` é calculado a partir das avaliações da conta e vem `null` com menos de 3. As regras estão em [IA e arquétipo](ia.md).
 
 O titular pode editar bio de até 160 caracteres e escolher um avatar entre `avatar-01` e `avatar-08`. O cliente associa os IDs às ilustrações. Omitir um campo preserva seu valor. Enviar `null` limpa o campo. Corpo inválido retorna `422 VALIDATION_ERROR`.
 

@@ -235,6 +235,8 @@ def test_docs_and_openapi_document_contract(client):
         ("/api/v1/users/me/images/{kind}", "put"),
         ("/api/v1/users/me/images/{kind}", "delete"),
         ("/api/v1/users/{user_id}/images/{kind}/{version}", "get"),
+        ("/api/v1/movies/{movie_id}/review-summary", "get"),
+        ("/api/v1/reviews/spoiler-check", "post"),
     }
     detail = schema["paths"]["/api/v1/reviews/{review_id}"]["get"]
     assert set(detail["responses"]) >= {"200", "400", "404", "422"}

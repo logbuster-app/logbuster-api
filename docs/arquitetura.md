@@ -10,8 +10,9 @@ services/            Regras de negócio
 repositories/        Acesso ao banco (SQLAlchemy)
 dependencies/        Injeção de dependências (sessão e services)
 domain/
-  enums.py           Highlight, ReviewInteractionType e ReviewSort
-  models/            Tabelas ORM (Review e ReviewInteraction)
+  enums.py           Highlights, interações, ordenações e estados da IA
+  rules.py           Regras compartilhadas, como o limite de votos de spoiler
+  models/            Tabelas ORM (Review, ReviewInteraction, User, ProfileImage e ReviewSummary)
   schemas/           Schemas Pydantic de entrada e saída
   errors/            AppError e erros de domínio
 utils/
@@ -41,5 +42,7 @@ tests/               Testes mockados
 - A FK para `reviews` usa `ON DELETE CASCADE`.
 - É gravada pelo `POST /api/v1/reviews/{review_id}/interactions` (`controllers/`, `services/` e `repositories/interaction.py`).
 - Os contadores (`counts`) das respostas são calculados a partir desta tabela.
+
+**`review_summaries`**: o último resumo da comunidade gerado por IA para cada filme (`movie_id` é a PK). Guarda `text`, `generated_at`, o total de avaliações na geração (`reviews_count`), as avaliações usadas (`source_review_ids`) e `failed_at`, que espaça novas tentativas. Detalhes em [IA e arquétipo](endpoints/ia.md).
 
 As regras de negócio são validadas no Pydantic, que dá a mensagem de erro amigável, e repetidas em `CHECK` no banco, que é a última linha de defesa.

@@ -102,15 +102,23 @@ def test_migration_matches_models_without_database():
     initial = load_migration("0001_create_reviews_and_review_interactions.py")
     ownership = load_migration("0002_add_users_and_review_ownership.py")
     images = load_migration("0003_create_profile_images.py")
-    for migration in (initial, ownership, images):
+    summaries = load_migration("0004_create_review_summaries.py")
+    for migration in (initial, ownership, images, summaries):
         with patch.object(migration, "op", operations):
             migration.upgrade()
     assert ownership.down_revision == initial.revision
     assert images.down_revision == ownership.revision
+    assert summaries.down_revision == images.revision
     assert (
         set(metadata.tables)
         == set(Base.metadata.tables)
-        == {"reviews", "review_interactions", "users", "profile_images"}
+        == {
+            "reviews",
+            "review_interactions",
+            "users",
+            "profile_images",
+            "review_summaries",
+        }
     )
     for name, table in metadata.tables.items():
         assert table_signature(table) == table_signature(Base.metadata.tables[name])
@@ -169,3 +177,24 @@ def test_output_rejects_naive_timestamps(review):
     review.created_at = datetime(2026, 1, 1)
     with pytest.raises(ValidationError):
         ReviewResponse.from_model(review)
+
+
+def test_review_summary_migration_downgrade_drops_table():
+    migration = load_migration("0004_create_review_summaries.py")
+    with patch.object(migration, "op") as operations:
+        migration.downgrade()
+    operations.drop_table.assert_called_once_with("review_summaries")
+    assert migration.revision == "0004" and migration.down_revision == "0003"
+
+
+def test_review_summary_table_follows_spec():
+    from domain.models import ReviewSummary
+
+    sql = str(
+        CreateTable(ReviewSummary.__table__).compile(dialect=postgresql.dialect())
+    )
+    assert "movie_id VARCHAR(12) NOT NULL" in sql
+    assert "PRIMARY KEY (movie_id)" in sql
+    assert "source_review_ids UUID[] DEFAULT '{}' NOT NULL" in sql
+    assert "generated_at TIMESTAMP WITH TIME ZONE" in sql
+    assert "movie_id ~ '^tt[0-9]{7,10}$'" in sql

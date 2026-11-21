@@ -45,3 +45,4 @@ Para ler esta documentação localmente: `npx docsify-cli serve docs`.
 | `BACK-06` | `POST /api/v1/reviews/{review_id}/interactions` | Implementado |
 | `BACK-05` | `GET /api/v1/movies/{movie_id}/rating` | Versão inicial (contrato ainda será alinhado à SPEC) |
 | `BACK-08` | [Autenticação, perfis públicos e histórico](endpoints/contas-e-perfis.md) | Implementado |
+| `BACK-09` | [Resumo da comunidade, sugestão de spoiler e arquétipo](endpoints/ia.md) | Implementado (Máquina do Tempo aguarda o corte de 22/11) |

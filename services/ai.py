@@ -84,8 +84,12 @@ class ChatClient:
         except AIUnavailableError as exc:
             logger.warning("IA indisponível (%s).", exc)
             raise
+        except httpx.HTTPStatusError as exc:
+            # Só o status: prompts, textos de usuários e a chave não vão para o log.
+            reason = f"HTTP {exc.response.status_code}"
+            logger.warning("IA indisponível (%s).", reason)
+            raise AIUnavailableError(reason) from exc
         except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
-            # Só o tipo do erro: prompts e textos de usuários não vão para o log.
             logger.warning("IA indisponível (%s).", type(exc).__name__)
             raise AIUnavailableError(type(exc).__name__) from exc
         return content.strip()

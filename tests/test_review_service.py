@@ -6,22 +6,31 @@ from pydantic import ValidationError
 
 from domain.enums import Highlight, ReviewInteractionType, ReviewSort
 from domain.errors.reviews import ReviewNotFoundError
+from domain.errors.users import UnauthorizedError
 from domain.models.review import Review
-from domain.schemas.reviews import ReviewCreate, ReviewResponse
+from domain.schemas.reviews import ReviewResponse, ReviewSubmission
 from repositories.review import ReviewWithCounts
 from services.review import ReviewService
 
 MOVIE_ID = "tt0133093"
 
 
-def test_create_review_runs_business_logic(review_repository, review, review_payload):
+def test_create_review_runs_business_logic(
+    review_repository, review, review_payload, review_author
+):
+    review_repository.get_author.return_value = review_author
     review_repository.create.return_value = review
 
-    result = ReviewService(review_repository).create(ReviewCreate(**review_payload))
+    result = ReviewService(review_repository).create_for_user(
+        ReviewSubmission(**review_payload), review_author.id
+    )
 
     saved = review_repository.create.call_args.args[0]
     assert saved.movie_id == MOVIE_ID
-    assert saved.author_name == "Thyago"
+    assert (saved.user_id, saved.author_name) == (
+        review_author.id,
+        review_author.display_name,
+    )
     assert saved.rating == Decimal("4.5") and isinstance(saved.rating, Decimal)
     assert saved.content == review_payload["content"]
     assert saved.is_spoiler is False
@@ -35,39 +44,48 @@ def test_create_review_runs_business_logic(review_repository, review, review_pay
 
 @pytest.mark.parametrize("rating", [0.5, 1, 4.5, 5.0])
 def test_rating_is_stored_as_exact_decimal(
-    review_repository, review, review_payload, rating
+    review_repository, review, review_payload, rating, review_author
 ):
     review.rating = Decimal(str(rating))
+    review_repository.get_author.return_value = review_author
     review_repository.create.return_value = review
-    result = ReviewService(review_repository).create(
-        ReviewCreate(**{**review_payload, "rating": rating})
+    result = ReviewService(review_repository).create_for_user(
+        ReviewSubmission(**{**review_payload, "rating": rating}), review_author.id
     )
     assert review_repository.create.call_args.args[0].rating == Decimal(str(rating))
     assert result.rating == rating
 
 
-def test_text_fields_are_normalized(review_repository, review, review_payload):
+def test_text_fields_are_normalized(
+    review_repository, review, review_payload, review_author
+):
+    review_repository.get_author.return_value = review_author
     review_repository.create.return_value = review
     payload = {
         **review_payload,
         "movie_id": f" {MOVIE_ID} ",
-        "author_name": "  Thyago  ",
         "content": f"  {review_payload['content']}  ",
     }
-    ReviewService(review_repository).create(ReviewCreate(**payload))
+    ReviewService(review_repository).create_for_user(
+        ReviewSubmission(**payload), review_author.id
+    )
     saved = review_repository.create.call_args.args[0]
-    assert (saved.movie_id, saved.author_name, saved.content) == (
+    assert (saved.movie_id, saved.content) == (
         MOVIE_ID,
-        "Thyago",
         review_payload["content"],
     )
 
 
-def test_highlights_default_to_empty(review_repository, review, review_payload):
+def test_highlights_default_to_empty(
+    review_repository, review, review_payload, review_author
+):
     review.highlights = []
+    review_repository.get_author.return_value = review_author
     review_repository.create.return_value = review
     payload = {k: v for k, v in review_payload.items() if k != "highlights"}
-    result = ReviewService(review_repository).create(ReviewCreate(**payload))
+    result = ReviewService(review_repository).create_for_user(
+        ReviewSubmission(**payload), review_author.id
+    )
     assert review_repository.create.call_args.args[0].highlights == []
     assert result.highlights == []
 
@@ -82,22 +100,34 @@ def test_highlights_default_to_empty(review_repository, review, review_payload):
     ],
 )
 def test_service_revalidates_before_persisting(
-    review_repository, review_payload, field, value
+    review_repository, review_payload, field, value, review_author
 ):
-    payload = ReviewCreate.model_construct(**{**review_payload, field: value})
+    payload = ReviewSubmission.model_construct(**{**review_payload, field: value})
     with pytest.raises(ValidationError):
-        ReviewService(review_repository).create(payload)
+        ReviewService(review_repository).create_for_user(payload, review_author.id)
     review_repository.create.assert_not_called()
 
 
 def test_service_does_not_swallow_repository_failures(
-    review_repository, review_payload
+    review_repository, review_payload, review_author
 ):
     error = RuntimeError("Falha de persistência")
+    review_repository.get_author.return_value = review_author
     review_repository.create.side_effect = error
     with pytest.raises(RuntimeError) as caught:
-        ReviewService(review_repository).create(ReviewCreate(**review_payload))
+        ReviewService(review_repository).create_for_user(
+            ReviewSubmission(**review_payload), review_author.id
+        )
     assert caught.value is error
+
+
+def test_service_rejects_token_for_missing_account(review_repository, review_payload):
+    review_repository.get_author.return_value = None
+    with pytest.raises(UnauthorizedError):
+        ReviewService(review_repository).create_for_user(
+            ReviewSubmission(**review_payload), uuid4()
+        )
+    review_repository.create.assert_not_called()
 
 
 @pytest.mark.parametrize(

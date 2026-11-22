@@ -9,8 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from dependencies.auth import get_required_user_id
 from dependencies.services import get_interaction_service, get_review_service
 from domain.models.review import Review
+from domain.models.user import User
 from repositories.review import ReviewRepository
 from services.interaction import InteractionService
 from services.review import ReviewService
@@ -49,12 +51,16 @@ def session():
 def review_payload():
     return {
         "movie_id": MOVIE_ID,
-        "author_name": "Thyago",
         "rating": 4.5,
         "content": "Direção precisa e efeitos visuais que revolucionaram o gênero.",
         "is_spoiler": False,
         "highlights": ["direction", "visual_effects"],
     }
+
+
+@pytest.fixture
+def review_author():
+    return User(id=uuid4(), display_name="Thyago")
 
 
 @pytest.fixture
@@ -95,3 +101,10 @@ def client(review_service, interaction_service):
             yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def authenticated_client(client, review_author):
+    app.dependency_overrides[get_required_user_id] = lambda: review_author.id
+    client.headers["Authorization"] = "Bearer test-token"
+    return client

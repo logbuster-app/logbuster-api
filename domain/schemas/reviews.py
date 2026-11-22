@@ -10,6 +10,7 @@ from pydantic import (
     Field,
     StringConstraints,
     field_validator,
+    model_validator,
 )
 
 from domain.enums import Highlight, ReviewInteractionType, ReviewSort
@@ -31,16 +32,13 @@ Rating = Annotated[
         examples=[4.5],
     ),
 ]
-AuthorName = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=2, max_length=50)
-]
 Content = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=10, max_length=2000)
 ]
 
 
 class ReviewSubmission(BaseModel):
-    """Payload de publicação com ou sem autenticação (SPEC-BACK-08)."""
+    """Payload de publicação autenticada (SPEC-BACK-08)."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -49,7 +47,6 @@ class ReviewSubmission(BaseModel):
             "examples": [
                 {
                     "movie_id": "tt0133093",
-                    "author_name": "Thyago",
                     "rating": 4.5,
                     "content": (
                         "Direção precisa e efeitos visuais que revolucionaram o gênero."
@@ -62,7 +59,6 @@ class ReviewSubmission(BaseModel):
     )
 
     movie_id: ImdbId
-    author_name: AuthorName | None = None
     rating: Rating
     content: Content
     is_spoiler: Annotated[bool, Field(strict=True)] = False
@@ -70,16 +66,19 @@ class ReviewSubmission(BaseModel):
         list[Highlight], Field(max_length=MAX_HIGHLIGHTS, default_factory=list)
     ]
 
+    @model_validator(mode="before")
+    @classmethod
+    def ignore_legacy_author_name(cls, value: object) -> object:
+        if isinstance(value, dict) and "author_name" in value:
+            value = {key: item for key, item in value.items() if key != "author_name"}
+        return value
+
     @field_validator("highlights")
     @classmethod
     def unique_highlights(cls, value: list[Highlight]) -> list[Highlight]:
         if len(set(value)) != len(value):
             raise ValueError("Os destaques não podem se repetir.")
         return value
-
-
-class ReviewCreate(ReviewSubmission):
-    author_name: AuthorName
 
 
 class SpoilerCheckRequest(BaseModel):

@@ -125,17 +125,17 @@ def test_spoiler_check_validates_like_review_content(ai_client, body, field):
 
 
 def test_scenario_4_publication_keeps_author_choice_without_prior_check(
-    ai_client, review_service, review_payload, review
+    ai_client, authenticated_client, review_service, review_payload, review
 ):
-    client, _summary, spoiler = ai_client
-    review_service.create.return_value = ReviewResponse.from_model(review)
+    _client, _summary, spoiler = ai_client
+    review_service.create_for_user.return_value = ReviewResponse.from_model(review)
 
-    response = client.post(
+    response = authenticated_client.post(
         "/api/v1/reviews", json={**review_payload, "is_spoiler": False}
     )
 
     assert response.status_code == 201
-    assert review_service.create.call_args.args[0].is_spoiler is False
+    assert review_service.create_for_user.call_args.args[0].is_spoiler is False
     spoiler.check.assert_not_called()
 
 

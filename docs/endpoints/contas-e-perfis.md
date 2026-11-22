@@ -47,6 +47,6 @@ curl -X PUT "$API_ORIGIN/api/v1/users/me/images/avatar" \
 
 ## Atualização do banco
 
-Rode `uv run --frozen alembic upgrade head`. A revisão `0002` cria as contas e permite um vínculo opcional das novas avaliações com o usuário. As avaliações anteriores preservam sua autoria anônima, e os votos continuam usando `X-Visitor-Id`.
+Rode `uv run --frozen alembic upgrade head`. A revisão `0002` cria as contas e adiciona o vínculo com o usuário. O vínculo no banco admite `null` para preservar as avaliações anônimas antigas, e a API exige conta para publicar novas avaliações.
 
 A revisão `0003` cria o armazenamento das imagens WebP no PostgreSQL. Perfis existentes começam com as duas URLs nulas.

@@ -10,6 +10,7 @@ from PIL.PngImagePlugin import PngInfo
 
 from dependencies.session import get_session
 from domain.models.profile_image import ProfileImage
+from domain.models.review import Review
 from domain.models.user import User
 from main import app
 from utils.security import create_access_token, hash_password, verify_password
@@ -196,17 +197,30 @@ def test_token_failures_do_not_persist_reviews(
         KEY,
         algorithm="HS256",
     )
-    for authorization in ("", "Basic abc", "Bearer malformed", f"Bearer {expired}"):
+    for headers in (
+        {},
+        {"Authorization": ""},
+        {"Authorization": "Basic abc"},
+        {"Authorization": "Bearer malformed"},
+        {"Authorization": f"Bearer {expired}"},
+    ):
         response = auth_client.post(
-            reviews, json=review_payload, headers={"Authorization": authorization}
+            reviews,
+            json={**review_payload, "author_name": "Visitante"},
+            headers=headers,
         )
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "UNAUTHORIZED"
+        assert response.headers["www-authenticate"] == "Bearer"
     session.add.assert_not_called()
+    session.commit.assert_not_called()
 
 
-def test_reviews_use_token_account_and_accept_legacy_anonymous_post(
-    auth_client, session, user, review_payload
+@pytest.mark.parametrize(
+    "legacy_fields", [{}, {"author_name": "Visitante"}, {"author_name": 1}]
+)
+def test_reviews_use_token_account_and_ignore_legacy_author_name(
+    auth_client, session, user, review_payload, legacy_fields
 ):
     def assign_generated_fields(review):
         review.id = uuid4()
@@ -214,21 +228,34 @@ def test_reviews_use_token_account_and_accept_legacy_anonymous_post(
 
     session.refresh.side_effect = assign_generated_fields
     session.get.return_value = user
-    reviews = "/api/v1/reviews"
-    without_name = {k: v for k, v in review_payload.items() if k != "author_name"}
+    response = auth_client.post(
+        "/api/v1/reviews",
+        headers=bearer(user.id),
+        json={**review_payload, **legacy_fields},
+    )
 
-    assert auth_client.post(reviews, json=without_name).status_code == 422
-    for payload in (without_name, review_payload):
-        authenticated = auth_client.post(reviews, headers=bearer(user.id), json=payload)
-        assert authenticated.status_code == 201
-        assert authenticated.json()["author_name"] == user.display_name
-        assert session.add.call_args.args[0].user_id == user.id
+    assert response.status_code == 201
+    assert response.json()["author_name"] == user.display_name
+    session.get.assert_called_once_with(User, user.id)
+    session.add.assert_called_once()
+    saved = session.add.call_args.args[0]
+    assert (saved.user_id, saved.author_name) == (user.id, user.display_name)
+    session.commit.assert_called_once()
 
-    anonymous = auth_client.post(reviews, json=review_payload)
-    assert anonymous.status_code == 201
-    assert anonymous.json()["author_name"] == review_payload["author_name"]
-    assert session.add.call_args.args[0].user_id is None
-    assert session.add.call_count == 3
+
+def test_movie_list_includes_legacy_anonymous_reviews(auth_client, session, review):
+    assert review.user_id is None
+    session.execute.return_value = [(review, 0, 0, 0)]
+    session.scalar.return_value = 1
+
+    response = auth_client.get(f"/api/v1/movies/{review.movie_id}/reviews")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    (item,) = response.json()["items"]
+    assert (item["id"], item["author_name"]) == (str(review.id), review.author_name)
+    statement = session.execute.call_args.args[0]
+    assert statement.whereclause.compare(Review.movie_id == review.movie_id)
 
 
 def test_invalid_jwt_configuration_and_cors(auth_client, session, user, monkeypatch):
@@ -249,12 +276,16 @@ def test_invalid_jwt_configuration_and_cors(auth_client, session, user, monkeypa
     assert "PATCH" in response.headers["access-control-allow-methods"]
 
 
-def test_openapi_declares_optional_bearer_for_review_and_required_for_profile(
+def test_openapi_requires_bearer_for_review_and_profile_edits(
     auth_client,
 ):
-    paths = auth_client.get("/api/openapi.json").json()["paths"]
-    assert {} in paths["/api/v1/reviews"]["post"]["security"]
-    assert {"HTTPBearer": []} in paths["/api/v1/reviews"]["post"]["security"]
+    schema = auth_client.get("/api/openapi.json").json()
+    paths = schema["paths"]
+    publication = paths["/api/v1/reviews"]["post"]
+    assert publication["security"] == [{"HTTPBearer": []}]
+    assert "401" in publication["responses"]
+    request_schema = schema["components"]["schemas"]["ReviewSubmission"]
+    assert "author_name" not in request_schema["properties"]
     assert paths["/api/v1/users/me"]["patch"]["security"] == [{"HTTPBearer": []}]
 
 

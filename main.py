@@ -29,8 +29,8 @@ app = FastAPI(
     title="Logbuster API",
     version="0.1.0",
     description=(
-        "API de avaliações de filmes do LogBuster com login opcional. "
-        "Visitantes informam author_name ao avaliar e usam X-Visitor-Id para votar. "
+        "API de avaliações de filmes do LogBuster. "
+        "Publicar avaliações exige conta. Visitantes usam X-Visitor-Id para votar. "
         "Erros seguem o envelope {error: {code, message, details}}."
     ),
     docs_url="/api/docs",

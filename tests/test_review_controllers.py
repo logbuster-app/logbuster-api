@@ -17,6 +17,10 @@ from main import app
 MOVIE_ID = "tt0133093"
 REVIEWS = "/api/v1/reviews"
 CONTENT = "Direção precisa e efeitos visuais que revolucionaram o gênero."
+MALFORMED_JSON = {
+    "content": "não é json",
+    "headers": {"Content-Type": "application/json"},
+}
 
 
 def assert_error(response, status, code):
@@ -30,11 +34,11 @@ def assert_error(response, status, code):
 
 
 def test_create_review_returns_201_with_spec_contract(
-    client, review_service, review, review_payload
+    authenticated_client, review_service, review, review_payload, review_author
 ):
-    review_service.create.return_value = ReviewResponse.from_model(review)
+    review_service.create_for_user.return_value = ReviewResponse.from_model(review)
 
-    response = client.post(REVIEWS, json=review_payload)
+    response = authenticated_client.post(REVIEWS, json=review_payload)
 
     assert response.status_code == 201
     assert response.json() == {
@@ -49,29 +53,32 @@ def test_create_review_returns_201_with_spec_contract(
         "viewer_interactions": [],
         "created_at": "2026-11-08T18:30:00Z",
     }
-    (payload,) = review_service.create.call_args.args
+    payload, user_id = review_service.create_for_user.call_args.args
+    assert user_id == review_author.id
     assert payload.rating == 4.5 and payload.movie_id == MOVIE_ID
 
 
 @pytest.mark.parametrize("rating", [0.5, 1, 3.0, 4.5, 5])
 @pytest.mark.parametrize("highlights", [[], ["soundtrack"], ["acting", "direction"]])
 def test_create_review_accepts_boundaries(
-    client, review_service, review, review_payload, rating, highlights
+    authenticated_client, review_service, review, review_payload, rating, highlights
 ):
-    review_service.create.return_value = ReviewResponse.from_model(review)
-    response = client.post(
+    review_service.create_for_user.return_value = ReviewResponse.from_model(review)
+    response = authenticated_client.post(
         REVIEWS, json={**review_payload, "rating": rating, "highlights": highlights}
     )
     assert response.status_code == 201
 
 
-def test_optional_fields_have_defaults(client, review_service, review, review_payload):
-    review_service.create.return_value = ReviewResponse.from_model(review)
+def test_optional_fields_have_defaults(
+    authenticated_client, review_service, review, review_payload
+):
+    review_service.create_for_user.return_value = ReviewResponse.from_model(review)
     payload = {
         k: v for k, v in review_payload.items() if k not in {"is_spoiler", "highlights"}
     }
-    assert client.post(REVIEWS, json=payload).status_code == 201
-    (received,) = review_service.create.call_args.args
+    assert authenticated_client.post(REVIEWS, json=payload).status_code == 201
+    received, _ = review_service.create_for_user.call_args.args
     assert received.is_spoiler is False and received.highlights == []
 
 
@@ -97,24 +104,25 @@ def test_optional_fields_have_defaults(client, review_service, review, review_pa
         ({"content": "x" * 9}, "content"),
         ({"content": "   curto   "}, "content"),
         ({"content": "x" * 2001}, "content"),
-        ({"author_name": "A"}, "author_name"),
-        ({"author_name": "  A  "}, "author_name"),
-        ({"author_name": "x" * 51}, "author_name"),
         ({"is_spoiler": "sim"}, "is_spoiler"),
     ],
 )
 def test_invalid_payload_returns_422_envelope(
-    client, review_service, review_payload, changes, field
+    authenticated_client, review_service, review_payload, changes, field
 ):
-    response = client.post(REVIEWS, json={**review_payload, **changes})
+    response = authenticated_client.post(REVIEWS, json={**review_payload, **changes})
     error = assert_error(response, 422, "VALIDATION_ERROR")
     assert error["details"][0]["field"].split(".")[0] == field
     assert error["message"] != "Os dados enviados são inválidos."
-    review_service.create.assert_not_called()
+    review_service.create_for_user.assert_not_called()
 
 
-def test_rating_error_message_matches_spec(client, review_service, review_payload):
-    response = client.post(REVIEWS, json={**review_payload, "rating": 0.3})
+def test_rating_error_message_matches_spec(
+    authenticated_client, review_service, review_payload
+):
+    response = authenticated_client.post(
+        REVIEWS, json={**review_payload, "rating": 0.3}
+    )
     error = assert_error(response, 422, "VALIDATION_ERROR")
     assert error["message"] == "A nota deve estar entre 0.5 e 5.0 em passos de 0.5."
     assert error["details"] == [
@@ -122,32 +130,38 @@ def test_rating_error_message_matches_spec(client, review_service, review_payloa
     ]
 
 
-@pytest.mark.parametrize("field", ["movie_id", "author_name", "rating", "content"])
+@pytest.mark.parametrize("field", ["movie_id", "rating", "content"])
 def test_missing_required_field_returns_422(
-    client, review_service, review_payload, field
+    authenticated_client, review_service, review_payload, field
 ):
     payload = {k: v for k, v in review_payload.items() if k != field}
-    error = assert_error(client.post(REVIEWS, json=payload), 422, "VALIDATION_ERROR")
+    error = assert_error(
+        authenticated_client.post(REVIEWS, json=payload), 422, "VALIDATION_ERROR"
+    )
     assert error["details"][0]["field"] == field
-    review_service.create.assert_not_called()
+    review_service.create_for_user.assert_not_called()
 
 
 @pytest.mark.parametrize(
     "body",
     [
         {"json": {"unexpected": "value"}},
-        {"content": "não é json", "headers": {"Content-Type": "application/json"}},
+        MALFORMED_JSON,
         {},
     ],
 )
-def test_malformed_body_returns_generic_422(client, review_service, body):
-    error = assert_error(client.post(REVIEWS, **body), 422, "VALIDATION_ERROR")
+def test_malformed_body_returns_generic_422(authenticated_client, review_service, body):
+    error = assert_error(
+        authenticated_client.post(REVIEWS, **body), 422, "VALIDATION_ERROR"
+    )
     assert error["details"]
-    review_service.create.assert_not_called()
+    review_service.create_for_user.assert_not_called()
 
 
-def test_extra_field_is_rejected(client, review_service, review_payload):
-    response = client.post(REVIEWS, json={**review_payload, "user_id": "u"})
+def test_extra_field_is_rejected(authenticated_client, review_service, review_payload):
+    response = authenticated_client.post(
+        REVIEWS, json={**review_payload, "user_id": "u"}
+    )
     error = assert_error(response, 422, "VALIDATION_ERROR")
     assert {"field": "user_id", "issue": "Extra inputs are not permitted"} in error[
         "details"
@@ -155,7 +169,7 @@ def test_extra_field_is_rejected(client, review_service, review_payload):
 
 
 def test_controller_real_service_and_mocked_session(
-    client, session, review, review_payload
+    authenticated_client, session, review, review_payload, review_author
 ):
     # Exercita a cadeia inteira, isolando somente a sessão de persistência.
     app.dependency_overrides.pop(get_review_service)
@@ -165,8 +179,9 @@ def test_controller_real_service_and_mocked_session(
         entity.id = review.id
         entity.created_at = review.created_at
 
+    session.get.return_value = review_author
     session.refresh.side_effect = populate_defaults
-    response = client.post(REVIEWS, json=review_payload)
+    response = authenticated_client.post(REVIEWS, json=review_payload)
     assert response.status_code == 201
     body = response.json()
     assert body["id"] == str(review.id)
@@ -174,6 +189,14 @@ def test_controller_real_service_and_mocked_session(
     assert body["counts"] == {"like": 0, "spoiler": 0, "well_argued": 0}
     session.add.assert_called_once()
     session.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("body", [{}, MALFORMED_JSON])
+def test_unauthenticated_request_returns_401_before_body_validation(
+    client, review_service, body
+):
+    assert_error(client.post(REVIEWS, **body), 401, "UNAUTHORIZED")
+    review_service.create_for_user.assert_not_called()
 
 
 @pytest.mark.parametrize("average,count", [(4.67, 3), (0.5, 1), (None, 0)])

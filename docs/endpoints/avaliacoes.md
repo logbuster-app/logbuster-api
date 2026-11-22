@@ -30,22 +30,21 @@ SPEC: [SPEC-BACK-01](https://github.com/logbuster-app/logbuster-docs/blob/main/d
 | Campo | Tipo | Obrigatório | Regra |
 | --- | --- | --- | --- |
 | `movie_id` | string | sim | imdbID, `^tt[0-9]{7,10}$` (ex.: `tt0133093`) |
-| `author_name` | string | sem login | De 2 a 50 caracteres, após remover espaços das pontas |
 | `rating` | number | sim | De `0.5` a `5.0`, em passos de `0.5` (`4.3`, `0` e `"4.5"` são rejeitados) |
 | `content` | string | sim | De 10 a 2000 caracteres, após remover espaços das pontas |
 | `is_spoiler` | boolean | não | Padrão `false` |
 | `highlights` | string[] | não | De 0 a 2 valores únicos entre `soundtrack`, `cinematography`, `screenplay`, `acting`, `direction` e `visual_effects` |
 
-Campos não listados acima são rejeitados com `422`.
+O campo legado `author_name` é ignorado no corpo. Outros campos fora da tabela retornam `422`.
 
-O login é opcional. Com `Authorization: Bearer <jwt>`, a conta é usada como autora e a avaliação aparece no [histórico do perfil](contas-e-perfis.md). O servidor usa o nome de exibição da conta. Sem token, a publicação usa `author_name` e fica anônima. Um token inválido ou vencido resulta em `401 UNAUTHORIZED`.
+Envie `Authorization: Bearer <jwt>` para publicar. A API vincula a avaliação à conta, usa o nome de exibição como `author_name` na resposta e inclui a avaliação no histórico do perfil.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/reviews \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "movie_id": "tt0133093",
-    "author_name": "Thyago",
     "rating": 4.5,
     "content": "Direção precisa e efeitos visuais que revolucionaram o gênero.",
     "is_spoiler": false,
@@ -55,6 +54,7 @@ curl -X POST http://localhost:8000/api/v1/reviews \
 
 **Respostas**
 - `201 Created`: o `ReviewResponse` com `id` gerado, `counts` zerados e `viewer_interactions: []`.
+- `401 UNAUTHORIZED`: token ausente, inválido, vencido ou de uma conta inexistente. Nada é salvo.
 - `422 VALIDATION_ERROR`: payload inválido. Nada é salvo. Exemplo com 3 destaques:
 
 ```json
@@ -91,7 +91,7 @@ Query ou header inválidos retornam `400 BAD_REQUEST`.
 | `rating_desc` | Nota ↓, mais recente |
 | `rating_asc` | Nota ↑, mais recente |
 
-A ordenação e a paginação acontecem no banco. Os contadores são agregados numa única consulta, e o `total` e o `viewer_interactions` usam no máximo mais duas.
+A ordenação e a paginação acontecem no banco. Os contadores são agregados numa única consulta, e o `total` e o `viewer_interactions` usam no máximo mais duas. As avaliações anônimas antigas continuam na lista com o nome original.
 
 ```bash
 curl "http://localhost:8000/api/v1/movies/tt0133093/reviews?sort=most_liked&page=1&page_size=10" \

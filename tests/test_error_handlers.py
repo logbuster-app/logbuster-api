@@ -9,7 +9,6 @@ from utils.database import DatabaseConfigurationError
 
 PAYLOAD = {
     "movie_id": "tt0133093",
-    "author_name": "Thyago",
     "rating": 4.0,
     "content": "Uma análise longa o bastante.",
 }
@@ -37,10 +36,10 @@ PAYLOAD = {
     ],
 )
 def test_errors_use_envelope_without_internal_details(
-    client, review_service, error, status, code, message, caplog
+    authenticated_client, review_service, error, status, code, message, caplog
 ):
-    review_service.create.side_effect = error
-    response = client.post("/api/v1/reviews", json=PAYLOAD)
+    review_service.create_for_user.side_effect = error
+    response = authenticated_client.post("/api/v1/reviews", json=PAYLOAD)
     assert response.status_code == status
     assert response.json() == {
         "error": {"code": code, "message": message, "details": []}
@@ -49,11 +48,13 @@ def test_errors_use_envelope_without_internal_details(
     assert "SENSITIVE" not in caplog.text
 
 
-def test_app_error_carries_custom_message_and_details(client, review_service):
-    review_service.create.side_effect = AppError(
+def test_app_error_carries_custom_message_and_details(
+    authenticated_client, review_service
+):
+    review_service.create_for_user.side_effect = AppError(
         "Mensagem própria.", [{"field": "x", "issue": "y"}]
     )
-    response = client.post("/api/v1/reviews", json=PAYLOAD)
+    response = authenticated_client.post("/api/v1/reviews", json=PAYLOAD)
     assert response.json()["error"] == {
         "code": "BAD_REQUEST",
         "message": "Mensagem própria.",
@@ -61,8 +62,8 @@ def test_app_error_carries_custom_message_and_details(client, review_service):
     }
 
 
-def test_output_schema_is_enforced(client, review_service):
-    review_service.create.return_value = {"id": "invalid"}
-    response = client.post("/api/v1/reviews", json=PAYLOAD)
+def test_output_schema_is_enforced(authenticated_client, review_service):
+    review_service.create_for_user.return_value = {"id": "invalid"}
+    response = authenticated_client.post("/api/v1/reviews", json=PAYLOAD)
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_ERROR"

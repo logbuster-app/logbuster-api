@@ -1,19 +1,20 @@
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query, status
-from fastapi.exceptions import RequestValidationError
+from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
+from fastapi.routing import APIRoute
 
-from dependencies.auth import OptionalUserId
+from dependencies.auth import RequiredUserId
 from dependencies.services import get_review_service
 from dependencies.visitor import OptionalVisitorIdDep
 from domain.enums import ReviewSort
+from domain.errors.users import UnauthorizedError
 from domain.schemas.errors import ErrorResponse
 from domain.schemas.movies import IMDB_ID_PATTERN, MovieRating
 from domain.schemas.reviews import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
-    ReviewCreate,
     ReviewListResponse,
     ReviewResponse,
     ReviewSubmission,
@@ -50,32 +51,46 @@ BAD_REQUEST_RESPONSE = {
 }
 
 
-@router.post(
+class ReviewCreationRoute(APIRoute):
+    def get_route_handler(self) -> Callable[[Request], Awaitable[Response]]:
+        handler = super().get_route_handler()
+
+        async def require_authorization(request: Request) -> Response:
+            # O FastAPI lê o JSON antes de resolver as dependências da rota.
+            if "Authorization" not in request.headers:
+                raise UnauthorizedError()
+            return await handler(request)
+
+        return require_authorization
+
+
+creation_router = APIRouter(route_class=ReviewCreationRoute)
+
+
+@creation_router.post(
     "/reviews",
     response_model=ReviewResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Cadastrar avaliação",
     description=(
         "Cria uma avaliação com estrelas de 0.5 a 5.0 (passos de 0.5), descrição, "
-        "flag de spoiler e até 2 destaques únicos. Sem autenticação, author_name "
-        "é obrigatório. Com um token Bearer válido, a avaliação é vinculada à conta "
-        "e usa o nome de exibição do titular."
+        "flag de spoiler e até 2 destaques únicos. Exige token Bearer válido. "
+        "A avaliação é vinculada à conta e usa o nome de exibição do titular."
     ),
     responses={
-        401: {"model": ErrorResponse, "description": "Token inválido ou expirado"}
+        401: {
+            "model": ErrorResponse,
+            "description": "Token ausente, inválido ou expirado",
+        }
     },
-    openapi_extra={"security": [{}]},
 )
 def create_review(
-    payload: ReviewSubmission, user_id: OptionalUserId, service: ReviewServiceDep
+    payload: ReviewSubmission, user_id: RequiredUserId, service: ReviewServiceDep
 ) -> ReviewResponse:
-    if user_id is not None:
-        return service.create_for_user(payload, user_id)
-    if payload.author_name is None:
-        raise RequestValidationError(
-            [{"loc": ("body", "author_name"), "msg": "Campo obrigatório sem login."}]
-        )
-    return service.create(ReviewCreate.model_validate(payload.model_dump()))
+    return service.create_for_user(payload, user_id)
+
+
+router.include_router(creation_router)
 
 
 @router.get(

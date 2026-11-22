@@ -125,6 +125,15 @@ def test_timeouts_and_network_errors_become_unavailable(error):
         client_with(handler).complete(MESSAGES, max_tokens=10, timeout=1)
 
 
+def test_http_error_log_includes_status(caplog):
+    def handler(_request):
+        return httpx.Response(503, json={"error": {"message": "high demand"}})
+
+    with pytest.raises(AIUnavailableError, match="HTTP 503"):
+        client_with(handler).complete(MESSAGES, max_tokens=10, timeout=1)
+    assert "HTTP 503" in caplog.text
+
+
 def test_failure_log_does_not_leak_prompt(caplog):
     def handler(_request):
         return httpx.Response(500)

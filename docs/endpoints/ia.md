@@ -84,7 +84,7 @@ A descrição explica a classificação com o número que a justifica. O catálo
 
 ## Configuração do provedor
 
-A equipe usa o plano gratuito do Gemini. Crie a chave no [Google AI Studio](https://aistudio.google.com/) e confira lá o nome do modelo e as cotas do plano gratuito. O `.env.example` já vem com a URL do Gemini, `AI_MODEL=gemini-3.8-flash` e `AI_REASONING_EFFORT=low`. Nos modelos Gemini 3 o raciocínio não pode ser desligado, e ele conta no limite de tokens de saída. Por isso a API reserva folga de tokens nas duas chamadas e recomenda o esforço `low`, que é mais rápido.
+A equipe usa o plano gratuito do Gemini. Crie a chave no [Google AI Studio](https://aistudio.google.com/) e confira lá o nome do modelo e as cotas do plano gratuito. O `.env.example` já vem com a URL do Gemini, `AI_MODEL=gemini-3.5-flash-lite` e `AI_REASONING_EFFORT=low`. Em teste no plano gratuito, ele respondeu em menos de 1 segundo, enquanto o `gemini-3.8-flash`, mais novo, devolvia 503 por alta demanda. O `gemini-3.1-flash-lite` é uma boa reserva. A chave precisa vir de um projeto com acesso ao plano gratuito: projetos sem esse acesso recebem 403 "free tier is not available for this project", e uma chave nova no mesmo projeto não resolve. Nos modelos Gemini 3 o raciocínio não pode ser desligado, e ele conta no limite de tokens de saída. Por isso a API reserva folga de tokens nas duas chamadas e recomenda o esforço `low`, que é mais rápido.
 
 A API chama qualquer provedor compatível com `POST {AI_BASE_URL}/chat/completions`, então trocar de provedor é só mudar as variáveis:
 

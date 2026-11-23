@@ -243,6 +243,7 @@ def test_docs_and_openapi_document_contract(client):
         ("/health", "get"),
         ("/api/v1/movies", "get"),
         ("/api/v1/movies/{movie_id}", "get"),
+        ("/api/v1/highlights/{highlight}/movies", "get"),
         ("/api/v1/reviews", "post"),
         ("/api/v1/movies/{movie_id}/reviews", "get"),
         ("/api/v1/reviews/{review_id}", "get"),

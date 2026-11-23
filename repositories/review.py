@@ -4,7 +4,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Label, Select, func, select
+from sqlalchemy import ColumnElement, Label, Select, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,7 @@ from domain.enums import Highlight, ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from domain.models.review_interaction import ReviewInteraction
 from domain.models.user import User
-from domain.rules import SPOILER_HIDE_VOTES
+from domain.rules import SPOILER_VOTE_THRESHOLD
 
 
 class ReviewWithCounts(NamedTuple):
@@ -98,6 +98,21 @@ class ReviewRepository:
     def get(self, review_id: UUID) -> Review | None:
         return self.session.get(Review, review_id)
 
+    def mark_spoiler(self, review_id: UUID) -> bool:
+        """Liga `is_spoiler` (CR-02). Nunca desliga; `False` se já estava ligada."""
+        statement = (
+            update(Review)
+            .where(Review.id == review_id, Review.is_spoiler.is_(False))
+            .values(is_spoiler=True)
+        )
+        try:
+            result = self.session.execute(statement)
+            self.session.commit()
+        except SQLAlchemyError:
+            self.session.rollback()
+            raise
+        return result.rowcount == 1
+
     def get_author(self, user_id: UUID) -> User | None:
         return self.session.get(User, user_id)
 
@@ -155,14 +170,14 @@ class ReviewRepository:
     ) -> list[ReviewWithCounts]:
         """Avaliações que podem ir para o resumo, mais bem argumentadas primeiro.
 
-        Ficam de fora as marcadas como spoiler pelo autor e as ocultadas pela
-        comunidade com `SPOILER_HIDE_VOTES` votos (SPEC-BACK-09, RN-01).
+        Ficam de fora as marcadas como spoiler (pelo autor ou pela IA) e as
+        ocultadas pela comunidade com `SPOILER_VOTE_THRESHOLD` votos (CR-02).
         """
         statement, counts = _select_with_counts(
             Review.movie_id == movie_id, Review.is_spoiler.is_(False)
         )
         statement = (
-            statement.where(counts.spoiler < SPOILER_HIDE_VOTES)
+            statement.where(counts.spoiler < SPOILER_VOTE_THRESHOLD)
             .order_by(*_order_by(ReviewSort.WELL_ARGUED, counts))
             .limit(limit)
         )
@@ -175,7 +190,7 @@ class ReviewRepository:
         statement, counts = _select_with_counts(
             Review.id.in_(review_ids), Review.is_spoiler.is_(False)
         )
-        statement = statement.where(counts.spoiler < SPOILER_HIDE_VOTES)
+        statement = statement.where(counts.spoiler < SPOILER_VOTE_THRESHOLD)
         return {row[0].id for row in self.session.execute(statement)}
 
     def count(self, movie_id: str) -> int:

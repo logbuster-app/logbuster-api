@@ -22,13 +22,20 @@ from domain.schemas.reviews import (
 from domain.schemas.users import Archetype
 from repositories.review import ReviewRepository, ReviewWithCounts
 from services.archetype import ReviewFacts, classify
+from services.spoiler_scheduler import SpoilerScheduler
 
 _identifier = TypeAdapter(Identifier)
 
 
 class ReviewService:
-    def __init__(self, repository: ReviewRepository) -> None:
+    def __init__(
+        self,
+        repository: ReviewRepository,
+        spoiler_scheduler: SpoilerScheduler | None = None,
+    ) -> None:
         self.repository = repository
+        # Sem agendador (ex.: em testes), a avaliação fica como o autor publicou.
+        self.spoiler_scheduler = spoiler_scheduler
 
     def create_for_user(
         self, payload: ReviewSubmission, user_id: UUID
@@ -47,8 +54,13 @@ class ReviewService:
             is_spoiler=payload.is_spoiler,
             highlights=[highlight.value for highlight in payload.highlights],
         )
+        created = self.repository.create(review)
+        # CR-02: depois de salvar, a IA analisa em segundo plano. A resposta não
+        # espera, e avaliação já marcada pelo autor não chama a IA (RN-01, RN-03).
+        if not created.is_spoiler and self.spoiler_scheduler is not None:
+            self.spoiler_scheduler.schedule(created.id)
         # Recém-criada: contadores zerados e nenhum voto do visitante (RN-05).
-        return ReviewResponse.from_model(self.repository.create(review))
+        return ReviewResponse.from_model(created)
 
     def list_for_user(
         self, user_id: UUID, query: UserReviewListQuery

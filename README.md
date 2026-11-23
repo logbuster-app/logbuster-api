@@ -27,7 +27,7 @@ Crie um arquivo `.env` com as variáveis de ambiente necessárias (veja o [.env.
 Para habilitar login por JWT, configure `JWT_SECRET` com uma chave aleatória de pelo menos 32 bytes
 (por exemplo, gerada com `openssl rand -hex 32`). `JWT_EXPIRES_IN` é opcional e vale 3600 segundos por padrão.
 
-Os recursos de IA (resumo da comunidade e sugestão de spoiler) usam o plano gratuito do Gemini (ou outro provedor
+Os recursos de IA (resumo da comunidade e análise de spoiler após publicar) usam o plano gratuito do Gemini (ou outro provedor
 compatível com `/chat/completions`). Gere a chave no Google AI Studio e preencha `AI_API_KEY`; o `.env.example`
 já traz `AI_BASE_URL`, `AI_MODEL` e `AI_REASONING_EFFORT` para o Gemini. Sem elas, essas rotas respondem
 `unavailable` e o restante da API funciona normalmente. Veja [docs/endpoints/ia.md](docs/endpoints/ia.md).

@@ -32,7 +32,7 @@ def test_third_review_unlocks_archetype_and_changes_follow_the_data():
         (
             [
                 ReviewFacts(3.0, is_spoiler=True),
-                ReviewFacts(3.5, spoiler_votes=3),
+                ReviewFacts(3.5, spoiler_votes=10),
                 ReviewFacts(3.0),
             ],
             "Contador de finais",
@@ -62,9 +62,12 @@ def test_precedence_prefers_community_votes_over_spoilers_and_ratings():
     assert classify(reviews).title == "Contador de finais"
 
 
-def test_two_community_spoiler_votes_do_not_count_as_spoiler():
-    reviews = facts(3.0, 3.5, 3.0, spoiler_votes=2)
+def test_nine_community_spoiler_votes_do_not_count_as_spoiler():
+    # CR-02: o limiar da comunidade passou de 3 para 10 votos.
+    reviews = facts(3.0, 3.5, 3.0, spoiler_votes=9)
     assert classify(reviews).title == "Equilibrado"
+    reviews = facts(3.0, 3.5, 3.0, spoiler_votes=10)
+    assert classify(reviews).title == "Contador de finais"
 
 
 def test_specialist_ignores_unknown_highlights_and_breaks_ties_by_enum_order():

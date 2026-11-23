@@ -301,3 +301,66 @@ def test_get_missing_review_raises_not_found(review_repository):
     with pytest.raises(ReviewNotFoundError):
         ReviewService(review_repository).get(uuid4(), visitor_id="v1")
     review_repository.viewer_interactions.assert_not_called()
+
+
+# --- CR-02: análise de spoiler agendada depois de salvar --------------------
+
+
+def test_cr02_scenario_1_schedules_analysis_after_saving(
+    review_repository, review, review_payload, review_author, spoiler_scheduler
+):
+    calls = []
+    review_repository.get_author.return_value = review_author
+    review_repository.create.side_effect = lambda saved: (
+        calls.append("salvou") or review
+    )
+    spoiler_scheduler.schedule = lambda review_id: calls.append(("agendou", review_id))
+
+    result = ReviewService(review_repository, spoiler_scheduler).create_for_user(
+        ReviewSubmission(**review_payload), review_author.id
+    )
+
+    # Salva antes de agendar e responde com o is_spoiler do autor, sem esperar.
+    assert calls == ["salvou", ("agendou", review.id)]
+    assert result.is_spoiler is False
+
+
+def test_cr02_scenario_4_author_marked_does_not_schedule(
+    review_repository, review, review_payload, review_author, spoiler_scheduler
+):
+    review.is_spoiler = True
+    review_repository.get_author.return_value = review_author
+    review_repository.create.return_value = review
+
+    result = ReviewService(review_repository, spoiler_scheduler).create_for_user(
+        ReviewSubmission(**{**review_payload, "is_spoiler": True}), review_author.id
+    )
+
+    assert result.is_spoiler is True
+    assert spoiler_scheduler.scheduled == []
+
+
+def test_cr02_failed_save_does_not_schedule(
+    review_repository, review_payload, review_author, spoiler_scheduler
+):
+    review_repository.get_author.return_value = review_author
+    review_repository.create.side_effect = RuntimeError("banco fora")
+
+    with pytest.raises(RuntimeError):
+        ReviewService(review_repository, spoiler_scheduler).create_for_user(
+            ReviewSubmission(**review_payload), review_author.id
+        )
+    assert spoiler_scheduler.scheduled == []
+
+
+def test_cr02_without_scheduler_publishes_normally(
+    review_repository, review, review_payload, review_author
+):
+    review_repository.get_author.return_value = review_author
+    review_repository.create.return_value = review
+
+    result = ReviewService(review_repository).create_for_user(
+        ReviewSubmission(**review_payload), review_author.id
+    )
+
+    assert result.id == review.id

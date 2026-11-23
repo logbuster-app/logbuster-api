@@ -11,6 +11,7 @@ from controllers.interaction import router as interaction_router
 from controllers.movies import router as movies_router
 from controllers.review import router as review_router
 from controllers.users import router as users_router
+from dependencies.services import shutdown_spoiler_scheduler
 from dependencies.visitor import VISITOR_HEADER
 from domain.schemas.errors import ErrorResponse
 from utils.error_handlers import register_error_handlers
@@ -23,6 +24,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.setLevel(settings.log_level)
     logger.info("Logbuster API iniciada (%s). Swagger: /api/docs", settings.app_env)
     yield
+    shutdown_spoiler_scheduler()
 
 
 app = FastAPI(

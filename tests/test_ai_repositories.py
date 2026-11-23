@@ -34,7 +34,7 @@ def test_summary_candidates_exclude_author_and_community_spoilers(session, revie
     query = sql(session.execute.call_args.args[0])
     assert f"reviews.movie_id = '{MOVIE_ID}'" in query
     assert "reviews.is_spoiler IS false" in query
-    assert "coalesce(interaction_counts.spoiler, 0) < 3" in query
+    assert "coalesce(interaction_counts.spoiler, 0) < 10" in query
     assert "ORDER BY well_argued_count DESC" in query
     assert "LIMIT 30" in query
 
@@ -134,4 +134,29 @@ def test_save_rolls_back_and_propagates_failures(session):
 
     with pytest.raises(OperationalError):
         ReviewSummaryRepository(session).save_failure(MOVIE_ID, failed_at=NOW)
+    session.rollback.assert_called_once()
+
+
+# --- CR-02 ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("rowcount", "expected"), [(1, True), (0, False)])
+def test_mark_spoiler_only_turns_flag_on(session, rowcount, expected):
+    session.execute.return_value.rowcount = rowcount
+    review_id = uuid4()
+
+    assert ReviewRepository(session).mark_spoiler(review_id) is expected
+
+    query = plain_sql(session.execute.call_args.args[0])
+    assert query.startswith("UPDATE reviews SET is_spoiler=")
+    assert "WHERE reviews.id = " in query
+    assert "reviews.is_spoiler IS false" in query
+    session.commit.assert_called_once()
+
+
+def test_mark_spoiler_rolls_back_on_failure(session):
+    session.execute.side_effect = OperationalError("update", {}, Exception("falha"))
+
+    with pytest.raises(OperationalError):
+        ReviewRepository(session).mark_spoiler(uuid4())
     session.rollback.assert_called_once()

@@ -3,7 +3,7 @@ from typing import Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
-from domain.enums import ReviewSummaryStatus, SpoilerCheckStatus
+from domain.enums import ReviewSummaryStatus
 
 
 class ReviewSummaryResponse(BaseModel):
@@ -50,11 +50,3 @@ class ReviewSummaryResponse(BaseModel):
     @classmethod
     def unavailable(cls) -> Self:
         return cls(status=ReviewSummaryStatus.UNAVAILABLE)
-
-
-class SpoilerCheckResponse(BaseModel):
-    """Só `suspected` aciona o aviso; `unavailable` publica sem aviso."""
-
-    model_config = ConfigDict(json_schema_extra={"examples": [{"status": "suspected"}]})
-
-    status: SpoilerCheckStatus

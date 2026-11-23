@@ -39,7 +39,7 @@ class ReviewSummaryStatus(StrEnum):
 
 
 class SpoilerCheckStatus(StrEnum):
-    """Resultado da sugestão de spoiler; só `suspected` aciona o aviso."""
+    """Resultado da análise de spoiler; só `suspected` liga `is_spoiler` (CR-02)."""
 
     SUSPECTED = "suspected"
     CLEAR = "clear"

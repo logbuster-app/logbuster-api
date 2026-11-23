@@ -10,7 +10,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from dependencies.auth import get_required_user_id
-from dependencies.services import get_interaction_service, get_review_service
+from dependencies.services import (
+    get_interaction_service,
+    get_review_service,
+    get_spoiler_scheduler,
+)
 from domain.models.review import Review
 from domain.models.user import User
 from repositories.review import ReviewRepository
@@ -40,6 +44,24 @@ def isolate_infrastructure():
     ):
         yield
     get_engine.cache_clear()
+
+
+class RecordingSpoilerScheduler:
+    """Agendador falso (CR-02): registra o que seria analisado, sem threads."""
+
+    def __init__(self):
+        self.scheduled = []
+
+    def schedule(self, review_id):
+        self.scheduled.append(review_id)
+
+
+@pytest.fixture(autouse=True)
+def spoiler_scheduler():
+    scheduler = RecordingSpoilerScheduler()
+    app.dependency_overrides[get_spoiler_scheduler] = lambda: scheduler
+    yield scheduler
+    app.dependency_overrides.pop(get_spoiler_scheduler, None)
 
 
 @pytest.fixture

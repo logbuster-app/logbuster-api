@@ -69,11 +69,12 @@ def test_session_rolls_back_and_closes_after_failure(session):
     session.close.assert_called_once()
 
 
-def test_dependency_factories_wire_repositories(session):
-    review_service = get_review_service(session)
+def test_dependency_factories_wire_repositories(session, spoiler_scheduler):
+    review_service = get_review_service(session, spoiler_scheduler)
     interaction_service = get_interaction_service(session)
     assert isinstance(review_service.repository, ReviewRepository)
     assert review_service.repository.session is session
+    assert review_service.spoiler_scheduler is spoiler_scheduler
     assert isinstance(interaction_service.reviews, ReviewRepository)
     assert isinstance(interaction_service.interactions, InteractionRepository)
     assert interaction_service.reviews.session is session

@@ -81,28 +81,6 @@ class ReviewSubmission(BaseModel):
         return value
 
 
-class SpoilerCheckRequest(BaseModel):
-    """Rascunho analisado antes de publicar (SPEC-BACK-09, RN-03).
-
-    O texto segue a mesma validação de `content` da SPEC-BACK-01.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "movie_id": "tt0133093",
-                    "content": "O texto digitado pelo autor no modal de avaliação.",
-                }
-            ]
-        },
-    )
-
-    movie_id: ImdbId
-    content: Content
-
-
 class ReviewCounts(BaseModel):
     like: Annotated[int, Field(ge=0)] = 0
     spoiler: Annotated[int, Field(ge=0)] = 0
@@ -117,7 +95,16 @@ class ReviewResponse(BaseModel):
     author_name: str
     rating: Annotated[float, Field(ge=0.5, le=5.0, multiple_of=0.5)]
     content: str
-    is_spoiler: bool
+    is_spoiler: Annotated[
+        bool,
+        Field(
+            description=(
+                "Marcação do autor ou da IA. Logo após publicar, a IA analisa a "
+                "avaliação em segundo plano e pode ligar a flag (CR-02); nunca a "
+                "desliga."
+            )
+        ),
+    ]
     highlights: list[Highlight]
     counts: ReviewCounts
     viewer_interactions: list[ReviewInteractionType]

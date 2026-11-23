@@ -1,4 +1,4 @@
-"""Contrato HTTP da SPEC-BACK-09: resumo, sugestão de spoiler e arquétipo."""
+"""Contrato HTTP da SPEC-BACK-09 com o CR-02: resumo, rota removida e arquétipo."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -9,13 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from dependencies.services import (
+    build_spoiler_check_service,
     get_chat_client,
     get_review_summary_service,
-    get_spoiler_check_service,
     get_title_lookup,
 )
 from dependencies.session import get_session
-from domain.enums import SpoilerCheckStatus
 from domain.models.review import Review
 from domain.models.user import User
 from domain.schemas.ai import ReviewSummaryResponse
@@ -25,7 +24,6 @@ from repositories.review import ReviewRepository
 from repositories.review_summary import ReviewSummaryRepository
 from services.ai import ChatClient
 from services.review_summary import ReviewSummaryService
-from services.spoiler import SpoilerCheckService
 
 MOVIE_ID = "tt0133093"
 SUMMARY_ROUTE = f"/api/v1/movies/{MOVIE_ID}/review-summary"
@@ -36,14 +34,12 @@ DRAFT = "No final, o Neo descobre que tudo era uma simulação."
 @pytest.fixture
 def ai_client(client):
     summary = Mock(spec=ReviewSummaryService)
-    spoiler = Mock(spec=SpoilerCheckService)
     app.dependency_overrides[get_review_summary_service] = lambda: summary
-    app.dependency_overrides[get_spoiler_check_service] = lambda: spoiler
-    return client, summary, spoiler
+    return client, summary
 
 
 def test_summary_ready_contract(ai_client):
-    client, summary, _spoiler = ai_client
+    client, summary = ai_client
     summary.get.return_value = ReviewSummaryResponse.ready(
         "A comunidade destaca a direção e a trilha sonora do filme.",
         datetime(2026, 11, 23, 15, tzinfo=UTC),
@@ -68,7 +64,7 @@ def test_summary_ready_contract(ai_client):
     ],
 )
 def test_summary_without_text_keeps_nulls(ai_client, result, status):
-    client, summary, _spoiler = ai_client
+    client, summary = ai_client
     summary.get.return_value = result
 
     response = client.get(SUMMARY_ROUTE)
@@ -78,7 +74,7 @@ def test_summary_without_text_keeps_nulls(ai_client, result, status):
 
 
 def test_summary_rejects_malformed_movie_id(ai_client):
-    client, summary, _spoiler = ai_client
+    client, summary = ai_client
 
     response = client.get("/api/v1/movies/matrix/review-summary")
 
@@ -87,47 +83,30 @@ def test_summary_rejects_malformed_movie_id(ai_client):
     summary.get.assert_not_called()
 
 
-@pytest.mark.parametrize("status", ["suspected", "clear", "unavailable"])
-def test_spoiler_check_contract(ai_client, review_service, status):
-    client, _summary, spoiler = ai_client
-    spoiler.check.return_value = SpoilerCheckStatus(status)
+# --- CR-02: rota de checagem de rascunho removida ---------------------------
 
-    response = client.post(
-        SPOILER_ROUTE, json={"movie_id": MOVIE_ID, "content": f"  {DRAFT}  "}
-    )
 
-    assert response.status_code == 200
-    assert response.json() == {"status": status}
-    spoiler.check.assert_called_once_with(MOVIE_ID, DRAFT)
-    # A análise não cria nem altera avaliações.
+@pytest.mark.parametrize("body", [{"movie_id": MOVIE_ID, "content": DRAFT}, {}, None])
+def test_cr02_scenario_8_removed_spoiler_check_returns_404(
+    client, review_service, body
+):
+    response = client.post(SPOILER_ROUTE, json=body)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
     assert review_service.mock_calls == []
 
 
-@pytest.mark.parametrize(
-    ("body", "field"),
-    [
-        ({"movie_id": MOVIE_ID, "content": "curto"}, "content"),
-        ({"movie_id": "matrix", "content": DRAFT}, "movie_id"),
-        ({"movie_id": MOVIE_ID}, "content"),
-        ({"movie_id": MOVIE_ID, "content": DRAFT, "is_spoiler": True}, "is_spoiler"),
-    ],
-)
-def test_spoiler_check_validates_like_review_content(ai_client, body, field):
-    client, _summary, spoiler = ai_client
-
-    response = client.post(SPOILER_ROUTE, json=body)
-
-    assert response.status_code == 422
-    error = response.json()["error"]
-    assert error["code"] == "VALIDATION_ERROR"
-    assert error["details"][0]["field"] == field
-    spoiler.check.assert_not_called()
+def test_cr02_removed_route_is_not_documented(client):
+    paths = client.get("/api/openapi.json").json()["paths"]
+    assert SPOILER_ROUTE not in paths
+    assert "IA" in paths["/api/v1/movies/{movie_id}/review-summary"]["get"]["tags"]
+    assert "SpoilerCheckRequest" not in str(paths)
 
 
-def test_scenario_4_publication_keeps_author_choice_without_prior_check(
-    ai_client, authenticated_client, review_service, review_payload, review
+def test_cr02_publication_contract_is_unchanged(
+    authenticated_client, review_service, review_payload, review
 ):
-    _client, _summary, spoiler = ai_client
     review_service.create_for_user.return_value = ReviewResponse.from_model(review)
 
     response = authenticated_client.post(
@@ -135,8 +114,8 @@ def test_scenario_4_publication_keeps_author_choice_without_prior_check(
     )
 
     assert response.status_code == 201
+    assert response.json()["is_spoiler"] is False
     assert review_service.create_for_user.call_args.args[0].is_spoiler is False
-    spoiler.check.assert_not_called()
 
 
 def test_dependencies_build_services_from_settings(monkeypatch, session):
@@ -154,8 +133,9 @@ def test_dependencies_build_services_from_settings(monkeypatch, session):
     assert chat.reasoning_effort == "low"
     titles = get_title_lookup()
 
-    spoiler = get_spoiler_check_service(chat, titles)
+    spoiler = build_spoiler_check_service()
     assert spoiler.timeout == 4
+    assert spoiler.chat.configured
 
     summary = get_review_summary_service(session, chat, titles)
     assert isinstance(summary.reviews, ReviewRepository)
@@ -168,13 +148,6 @@ def test_ai_is_unavailable_by_default(monkeypatch):
     for name in ("AI_BASE_URL", "AI_API_KEY", "AI_MODEL"):
         monkeypatch.delenv(name, raising=False)
     assert get_chat_client().configured is False
-
-
-def test_openapi_documents_ai_routes(ai_client):
-    client, _summary, _spoiler = ai_client
-    paths = client.get("/api/openapi.json").json()["paths"]
-    assert "IA" in paths["/api/v1/movies/{movie_id}/review-summary"]["get"]["tags"]
-    assert "IA" in paths["/api/v1/reviews/spoiler-check"]["post"]["tags"]
 
 
 # --- Cenário 6: arquétipo no perfil público -------------------------------
@@ -257,3 +230,31 @@ def test_archetype_uses_votes_received_and_follows_data_changes(
         profile_client.get(f"/api/v1/users/{user.id}").json()["archetype"]["title"]
         == "Crítico exigente"
     )
+
+
+# --- CR-02: agendador real só existe uma vez por processo -----------------
+
+
+def test_spoiler_scheduler_is_a_process_singleton_and_shuts_down():
+    from dependencies.services import (
+        get_spoiler_scheduler,
+        shutdown_spoiler_scheduler,
+    )
+    from services.spoiler_scheduler import SpoilerReviewJob, SpoilerReviewScheduler
+
+    shutdown_spoiler_scheduler()
+    first = get_spoiler_scheduler()
+    assert isinstance(first, SpoilerReviewScheduler)
+    assert isinstance(first.job, SpoilerReviewJob)
+    assert get_spoiler_scheduler() is first
+
+    shutdown_spoiler_scheduler()
+    assert get_spoiler_scheduler.cache_info().currsize == 0
+    shutdown_spoiler_scheduler()  # sem pool criado, não faz nada
+
+
+def test_real_review_service_dependency_receives_scheduler(session, spoiler_scheduler):
+    from dependencies.services import get_review_service
+
+    service = get_review_service(session, spoiler_scheduler)
+    assert service.spoiler_scheduler is spoiler_scheduler

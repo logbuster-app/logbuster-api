@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from domain.enums import Highlight
-from domain.rules import SPOILER_HIDE_VOTES
+from domain.rules import SPOILER_VOTE_THRESHOLD
 
 MIN_REVIEWS = 3
 
@@ -91,7 +91,7 @@ def classify(reviews: Sequence[ReviewFacts]) -> ArchetypeResult | None:
     spoilers = sum(
         1
         for review in reviews
-        if review.is_spoiler or review.spoiler_votes >= SPOILER_HIDE_VOTES
+        if review.is_spoiler or review.spoiler_votes >= SPOILER_VOTE_THRESHOLD
     )
     spoiler_share = spoilers / total
 

@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from domain.enums import ReviewInteractionType, ReviewSort
+from domain.enums import Highlight, ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from repositories.review import ReviewRepository, ReviewWithCounts
 
@@ -106,6 +106,24 @@ def compile_last_execute(session):
     statement = session.execute.call_args.args[0]
     compiled = statement.compile(dialect=postgresql.dialect())
     return " ".join(str(compiled).split()), compiled.params
+
+
+def test_movies_by_highlight_counts_and_ranks_in_database(session):
+    session.execute.return_value = [(MOVIE_ID, Decimal("4.25"), 4, 3)]
+
+    assert ReviewRepository(session).movies_by_highlight(
+        Highlight.ACTING, limit=10
+    ) == [(MOVIE_ID, 4.25, 4, 3)]
+    sql, params = compile_last_execute(session)
+    assert "count(*) FILTER (WHERE reviews.highlights @>" in sql
+    assert "GROUP BY reviews.movie_id HAVING count(*) FILTER" in sql
+    assert (
+        "ORDER BY highlight_count DESC, avg(reviews.rating) DESC, reviews.movie_id"
+        in sql
+    )
+    assert "is_spoiler" not in sql
+    assert params["highlights_1"] == ["acting"]
+    assert params["param_2"] == 10
 
 
 @pytest.mark.parametrize("sort", list(ReviewSort))

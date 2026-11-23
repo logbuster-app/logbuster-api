@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import httpx
 
 from config import settings
@@ -60,6 +62,8 @@ class OmdbClient:
             )
             response.raise_for_status()
             data = response.json()
+            if not isinstance(data, dict):
+                raise OmdbError
             if data.get("Response") == "False":
                 if data.get("Error") in ("Movie not found!", "Incorrect IMDb ID."):
                     raise MovieNotFound
@@ -85,3 +89,20 @@ class OmdbClient:
             }
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             raise OmdbError from exc
+
+
+@lru_cache(maxsize=1_000)
+def get_movie_metadata(
+    omdb: OmdbClient, movie_id: str
+) -> tuple[str, str | None, str | None]:
+    movie = omdb.get_movie(movie_id, timeout=2.0)
+    title = movie.get("title")
+    if not isinstance(title, str) or not title.strip() or title == "N/A":
+        raise OmdbError
+    year = movie.get("year")
+    poster_url = movie.get("poster_url")
+    return (
+        title,
+        year if isinstance(year, str) else None,
+        poster_url if isinstance(poster_url, str) else None,
+    )

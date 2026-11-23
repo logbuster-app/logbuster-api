@@ -26,3 +26,17 @@ class MovieRating(BaseModel):
         ),
     ]
     reviews_count: Annotated[int, Field(ge=0, serialization_alias="rating_count")]
+
+
+class HighlightedMovie(BaseModel):
+    id: str
+    title: str
+    year: str | None
+    poster_url: str | None
+    rating_avg: float
+    rating_count: int
+    highlight_count: int
+
+
+class HighlightedMoviesResponse(BaseModel):
+    items: list[HighlightedMovie]

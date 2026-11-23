@@ -124,3 +124,76 @@ def test_omdb_detail_normalization_and_not_found(monkeypatch):
     response.json.return_value = {"Response": "False", "Error": "Invalid API key!"}
     with pytest.raises(OmdbError):
         OmdbClient().get_movie("tt0000000")
+
+
+@pytest.mark.parametrize(
+    ("path", "field"),
+    [
+        ("acting/movies?limit=0", "limit"),
+        ("acting/movies?limit=21", "limit"),
+        ("invalid/movies", "highlight"),
+    ],
+)
+def test_highlight_movies_rejects_invalid_parameters(search_client, path, field):
+    client, session, omdb = search_client
+    response = client.get(f"/api/v1/highlights/{path}")
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert error["details"][0]["field"] == field
+    session.execute.assert_not_called()
+    omdb.get_movie.assert_not_called()
+
+
+@pytest.mark.parametrize("limit", [1, 20])
+def test_highlight_movies_returns_empty_ranking(search_client, limit):
+    client, session, omdb = search_client
+    session.execute.return_value = []
+
+    response = client.get(f"/api/v1/highlights/acting/movies?limit={limit}")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+    omdb.get_movie.assert_not_called()
+
+
+def test_highlight_movies_falls_back_and_caches_only_success(search_client):
+    client, session, omdb = search_client
+    movie_id = "tt0133093"
+    session.execute.return_value = [(movie_id, 4.25, 4, 3)]
+    omdb.get_movie.side_effect = [
+        OmdbError(),
+        {
+            "title": "Matrix",
+            "year": "1999",
+            "poster_url": "https://example.test/poster",
+        },
+    ]
+    path = "/api/v1/highlights/acting/movies"
+
+    response = client.get(path)
+
+    assert response.status_code == 200
+    fallback = {
+        "id": movie_id,
+        "title": movie_id,
+        "year": None,
+        "poster_url": None,
+        "rating_avg": 4.25,
+        "rating_count": 4,
+        "highlight_count": 3,
+    }
+    assert response.json() == {"items": [fallback]}
+    session.execute.assert_called_once()
+
+    expected = {
+        **fallback,
+        "title": "Matrix",
+        "year": "1999",
+        "poster_url": "https://example.test/poster",
+    }
+    assert client.get(path).json() == {"items": [expected]}
+    assert client.get(path).json() == {"items": [expected]}
+    assert omdb.get_movie.call_count == 2
+    omdb.get_movie.assert_called_with(movie_id, timeout=2.0)

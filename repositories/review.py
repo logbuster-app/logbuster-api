@@ -8,7 +8,7 @@ from sqlalchemy import ColumnElement, Label, Select, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from domain.enums import ReviewInteractionType, ReviewSort
+from domain.enums import Highlight, ReviewInteractionType, ReviewSort
 from domain.models.review import Review
 from domain.models.review_interaction import ReviewInteraction
 from domain.models.user import User
@@ -181,6 +181,33 @@ class ReviewRepository:
     def count(self, movie_id: str) -> int:
         statement = select(func.count(Review.id)).where(Review.movie_id == movie_id)
         return self.session.scalar(statement) or 0
+
+    def movies_by_highlight(
+        self, highlight: Highlight, *, limit: int
+    ) -> list[tuple[str, float, int, int]]:
+        highlight_count = (
+            func.count()
+            .filter(Review.highlights.contains([highlight.value]))
+            .label("highlight_count")
+        )
+        rating_avg = func.avg(Review.rating)
+        rating_count = func.count()
+        statement = (
+            select(
+                Review.movie_id,
+                func.round(rating_avg, 2),
+                rating_count,
+                highlight_count,
+            )
+            .group_by(Review.movie_id)
+            .having(highlight_count > 0)
+            .order_by(highlight_count.desc(), rating_avg.desc(), Review.movie_id)
+            .limit(limit)
+        )
+        rows = self.session.execute(statement)
+        return [
+            (movie_id, float(avg), total, count) for movie_id, avg, total, count in rows
+        ]
 
     def ratings_map(self, movie_ids: list[str]) -> dict[str, tuple[float, int]]:
         if not movie_ids:

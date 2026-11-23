@@ -73,15 +73,16 @@ async def validation_error_handler(
 ) -> JSONResponse:
     errors = list(exc.errors())
     first_location = errors[0].get("loc", ()) if errors else ()
-    # A SPEC-BACK-08 usa 422 para paginação inválida no histórico público.
-    invalid_history_page = (
-        first_location[:1] == ("query",)
-        and getattr(request.scope.get("route"), "name", None) == "list_user_reviews"
-    )
+    # SPEC-BACK-08 e SPEC-BACK-10 usam 422 para query inválida nessas rotas.
+    route_name = getattr(request.scope.get("route"), "name", None)
+    invalid_list_query = first_location[:1] == ("query",) and route_name in {
+        "list_user_reviews",
+        "list_highlight_movies",
+    }
     if (
         first_location
         and first_location[0] in BAD_REQUEST_LOCATIONS
-        and not invalid_history_page
+        and not invalid_list_query
     ):
         status_code, code, message = 400, "BAD_REQUEST", DEFAULT_BAD_REQUEST_MESSAGE
     else:

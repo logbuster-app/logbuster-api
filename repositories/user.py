@@ -1,7 +1,7 @@
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select, update
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session, undefer
 
 from domain.enums import ProfileImageKind
@@ -24,7 +24,7 @@ class UserRepository:
         statement = (
             insert(User)
             .values(display_name=display_name, email=email, password_hash=password_hash)
-            .on_conflict_do_nothing(constraint="uq_users_email")
+            .on_conflict_do_nothing(index_elements=[User.email])
             .returning(User)
         )
         user = self.session.scalars(statement).one_or_none()

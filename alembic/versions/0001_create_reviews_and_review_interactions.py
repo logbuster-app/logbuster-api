@@ -6,7 +6,6 @@ Revises: None
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision = "0001"
 down_revision = None
@@ -17,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "reviews",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", sa.Uuid(as_uuid=True), nullable=False),
         sa.Column("movie_id", sa.String(12), nullable=False),
         sa.Column("author_name", sa.String(50), nullable=False),
         sa.Column("rating", sa.Numeric(2, 1), nullable=False),
@@ -27,8 +26,8 @@ def upgrade() -> None:
         ),
         sa.Column(
             "highlights",
-            postgresql.ARRAY(sa.String(32)),
-            server_default=sa.text("'{}'"),
+            sa.Text(),
+            server_default=sa.text("'[]'"),
             nullable=False,
         ),
         sa.Column(
@@ -38,7 +37,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.CheckConstraint("movie_id ~ '^tt[0-9]{7,10}$'", name="ck_reviews_movie_id"),
+        sa.CheckConstraint(
+            "movie_id LIKE 'tt%' AND length(movie_id) BETWEEN 9 AND 12 "
+            "AND substr(movie_id, 3) NOT GLOB '*[^0-9]*'",
+            name="ck_reviews_movie_id",
+        ),
         sa.CheckConstraint(
             "length(trim(author_name)) BETWEEN 2 AND 50", name="ck_reviews_author_name"
         ),
@@ -50,7 +53,7 @@ def upgrade() -> None:
             "length(trim(content)) BETWEEN 10 AND 2000", name="ck_reviews_content"
         ),
         sa.CheckConstraint(
-            "cardinality(highlights) <= 2", name="ck_reviews_highlights"
+            "json_array_length(highlights) <= 2", name="ck_reviews_highlights"
         ),
     )
     op.create_index(
@@ -58,8 +61,8 @@ def upgrade() -> None:
     )
     op.create_table(
         "review_interactions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("review_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", sa.Uuid(as_uuid=True), nullable=False),
+        sa.Column("review_id", sa.Uuid(as_uuid=True), nullable=False),
         sa.Column("visitor_id", sa.String(64), nullable=False),
         sa.Column(
             "type",

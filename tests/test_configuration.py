@@ -22,21 +22,22 @@ def test_database_url_required(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "url", ["invalid", "sqlite://", "postgresql://user@localhost/db"]
+    "url",
+    ["invalid", "postgresql://user@localhost/db", "postgresql+psycopg://user@localhost/db"],
 )
-def test_database_requires_postgresql_psycopg3(monkeypatch, url):
+def test_database_requires_sqlite(monkeypatch, url):
     monkeypatch.setenv("DATABASE_URL", url)
     with pytest.raises(DatabaseConfigurationError):
         get_database_url()
 
 
 def test_engine_is_lazy_cached_and_hides_parameters(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user@localhost/db")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     with patch("utils.database.create_engine") as factory:
         assert get_engine() is get_engine()
         factory.assert_called_once()
         assert factory.call_args.kwargs["hide_parameters"] is True
-        assert factory.call_args.kwargs["connect_args"]["options"] == "-c timezone=UTC"
+        assert factory.call_args.kwargs["connect_args"]["check_same_thread"] is False
 
 
 def test_session_factory_does_not_expire_committed_entities():

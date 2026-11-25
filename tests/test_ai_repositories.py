@@ -3,7 +3,7 @@ from unittest.mock import call
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.exc import OperationalError
 
 from domain.models.review_summary import ReviewSummary
@@ -15,12 +15,12 @@ NOW = datetime(2026, 11, 23, 15, tzinfo=UTC)
 
 
 def plain_sql(statement):
-    return " ".join(str(statement.compile(dialect=postgresql.dialect())).split())
+    return " ".join(str(statement.compile(dialect=sqlite.dialect())).split())
 
 
 def sql(statement):
     compiled = statement.compile(
-        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
     )
     return " ".join(str(compiled).split())
 
@@ -33,7 +33,7 @@ def test_summary_candidates_exclude_author_and_community_spoilers(session, revie
     assert rows == [ReviewWithCounts(review, 1, 2, 3)]
     query = sql(session.execute.call_args.args[0])
     assert f"reviews.movie_id = '{MOVIE_ID}'" in query
-    assert "reviews.is_spoiler IS false" in query
+    assert "reviews.is_spoiler IS 0" in query
     assert "coalesce(interaction_counts.spoiler, 0) < 10" in query
     assert "ORDER BY well_argued_count DESC" in query
     assert "LIMIT 30" in query
@@ -51,7 +51,7 @@ def test_eligible_ids_returns_still_eligible_reviews(session, review):
 
     assert result == {review.id}
     query = plain_sql(session.execute.call_args.args[0])
-    assert "reviews.is_spoiler IS false" in query
+    assert "reviews.is_spoiler IS 0" in query
     assert "reviews.id IN" in query
     assert "coalesce(interaction_counts.spoiler" in query
 
@@ -74,14 +74,16 @@ def test_summary_get_by_primary_key(session, refresh):
     )
 
 
-@pytest.mark.parametrize("acquired", [True, False])
-def test_try_lock_uses_non_blocking_transaction_lock(session, acquired):
-    session.scalar.return_value = acquired
-
-    assert ReviewSummaryRepository(session).try_lock(MOVIE_ID) is acquired
-    query = sql(session.scalar.call_args.args[0])
-    assert "pg_try_advisory_xact_lock(hashtextextended(" in query
-    assert f"review-summary:{MOVIE_ID}" in query
+def test_try_lock_prevents_concurrent_generation_until_released(session):
+    repo_one = ReviewSummaryRepository(session)
+    repo_two = ReviewSummaryRepository(session)
+    try:
+        assert repo_one.try_lock(MOVIE_ID) is True
+        assert repo_two.try_lock(MOVIE_ID) is False
+    finally:
+        repo_one.release()
+    assert repo_two.try_lock(MOVIE_ID) is True
+    repo_two.release()
 
 
 def test_release_rolls_back(session):
@@ -150,7 +152,7 @@ def test_mark_spoiler_only_turns_flag_on(session, rowcount, expected):
     query = plain_sql(session.execute.call_args.args[0])
     assert query.startswith("UPDATE reviews SET is_spoiler=")
     assert "WHERE reviews.id = " in query
-    assert "reviews.is_spoiler IS false" in query
+    assert "reviews.is_spoiler IS 0" in query
     session.commit.assert_called_once()
 
 

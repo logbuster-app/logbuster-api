@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from domain.enums import ReviewInteractionType
@@ -11,7 +11,7 @@ from repositories.interaction import InteractionRepository
 
 def compiled(call):
     statement = call.args[0]
-    result = statement.compile(dialect=postgresql.dialect())
+    result = statement.compile(dialect=sqlite.dialect())
     return " ".join(str(result).split()), result.params
 
 
@@ -27,10 +27,10 @@ def test_toggle_removes_existing_vote(session):
     assert session.execute.call_count == 1  # não tenta inserir
     sql, params = compiled(session.execute.call_args_list[0])
     assert sql.startswith("DELETE FROM review_interactions WHERE")
-    assert "review_interactions.review_id = %(review_id_1)s" in sql
-    assert "review_interactions.visitor_id = %(visitor_id_1)s" in sql
-    assert "review_interactions.type = %(type_1)s" in sql
-    assert sql.endswith("RETURNING review_interactions.id")
+    assert "review_interactions.review_id = ?" in sql
+    assert "review_interactions.visitor_id = ?" in sql
+    assert "review_interactions.type = ?" in sql
+    assert sql.endswith("RETURNING id")
     assert params == {
         "review_id_1": review_id,
         "visitor_id_1": "v1",
@@ -53,10 +53,7 @@ def test_toggle_inserts_missing_vote_idempotently(session):
     assert session.execute.call_count == 2
     sql, params = compiled(session.execute.call_args_list[1])
     assert sql.startswith("INSERT INTO review_interactions")
-    assert sql.endswith(
-        "ON CONFLICT ON CONSTRAINT uq_review_interactions_review_visitor_type "
-        "DO NOTHING"
-    )
+    assert sql.endswith("ON CONFLICT (review_id, visitor_id, type) DO NOTHING")
     assert params["review_id"] == review_id
     assert params["visitor_id"] == "v1"
     assert params["type"] == ReviewInteractionType.LIKE

@@ -6,7 +6,6 @@ Revises: 0001
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision = "0002"
 down_revision = "0001"
@@ -17,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("display_name", sa.String(50), nullable=False),
         sa.Column("email", sa.Text(), nullable=False),
         sa.Column("password_hash", sa.Text(), nullable=False),
@@ -31,24 +30,23 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
-    op.add_column(
-        "reviews", sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
-    op.create_foreign_key(
-        "fk_reviews_user_id",
-        "reviews",
-        "users",
-        ["user_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index(
-        "ix_reviews_user_created_id", "reviews", ["user_id", "created_at", "id"]
-    )
+    with op.batch_alter_table("reviews") as batch_op:
+        batch_op.add_column(sa.Column("user_id", sa.Uuid(as_uuid=True), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_reviews_user_id",
+            "users",
+            ["user_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+        batch_op.create_index(
+            "ix_reviews_user_created_id", ["user_id", "created_at", "id"]
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_reviews_user_created_id", table_name="reviews")
-    op.drop_constraint("fk_reviews_user_id", "reviews", type_="foreignkey")
-    op.drop_column("reviews", "user_id")
+    with op.batch_alter_table("reviews") as batch_op:
+        batch_op.drop_index("ix_reviews_user_created_id")
+        batch_op.drop_constraint("fk_reviews_user_id", type_="foreignkey")
+        batch_op.drop_column("user_id")
     op.drop_table("users")

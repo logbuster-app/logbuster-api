@@ -6,7 +6,6 @@ Revises: 0002
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision = "0003"
 down_revision = "0002"
@@ -17,9 +16,9 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "profile_images",
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", sa.Uuid(as_uuid=True), nullable=False),
         sa.Column("kind", sa.String(10), nullable=False),
-        sa.Column("version", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("version", sa.Uuid(as_uuid=True), nullable=False),
         sa.Column("content", sa.LargeBinary(), nullable=False),
         sa.PrimaryKeyConstraint("user_id", "kind"),
         sa.ForeignKeyConstraint(

@@ -3,7 +3,7 @@ from unittest.mock import call
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from domain.enums import Highlight, ReviewInteractionType, ReviewSort
@@ -54,7 +54,7 @@ def test_get_missing_returns_none(session):
 def test_count_filters_movie(session, count):
     session.scalar.return_value = count
     assert ReviewRepository(session).count(MOVIE_ID) == count
-    compiled = session.scalar.call_args.args[0].compile(dialect=postgresql.dialect())
+    compiled = session.scalar.call_args.args[0].compile(dialect=sqlite.dialect())
     assert "count(reviews.id)" in str(compiled)
     assert compiled.params == {"movie_id_1": MOVIE_ID}
 
@@ -63,7 +63,7 @@ def test_count_filters_movie(session, count):
 def test_rating_aggregates_in_database(session, row):
     session.execute.return_value.one.return_value = row
     assert ReviewRepository(session).rating(MOVIE_ID) == row
-    compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+    compiled = session.execute.call_args.args[0].compile(dialect=sqlite.dialect())
     assert "avg(reviews.rating)" in str(compiled)
     assert "count(reviews.id)" in str(compiled)
     assert "WHERE reviews.movie_id =" in str(compiled)
@@ -104,7 +104,7 @@ ORDER_BY = {
 
 def compile_last_execute(session):
     statement = session.execute.call_args.args[0]
-    compiled = statement.compile(dialect=postgresql.dialect())
+    compiled = statement.compile(dialect=sqlite.dialect())
     return " ".join(str(compiled).split()), compiled.params
 
 
@@ -115,15 +115,16 @@ def test_movies_by_highlight_counts_and_ranks_in_database(session):
         Highlight.ACTING, limit=10
     ) == [(MOVIE_ID, 4.25, 4, 3)]
     sql, params = compile_last_execute(session)
-    assert "count(*) FILTER (WHERE reviews.highlights @>" in sql
+    assert "count(*) FILTER (WHERE EXISTS (SELECT " in sql
+    assert "FROM json_each(reviews.highlights)" in sql
     assert "GROUP BY reviews.movie_id HAVING count(*) FILTER" in sql
     assert (
         "ORDER BY highlight_count DESC, avg(reviews.rating) DESC, reviews.movie_id"
         in sql
     )
     assert "is_spoiler" not in sql
-    assert params["highlights_1"] == ["acting"]
-    assert params["param_2"] == 10
+    assert "acting" in params.values()
+    assert 10 in params.values()
 
 
 @pytest.mark.parametrize("sort", list(ReviewSort))
@@ -141,16 +142,15 @@ def test_list_aggregates_counts_of_the_movie_only(session):
         MOVIE_ID, sort=ReviewSort.WELL_ARGUED, limit=10, offset=0
     )
     sql, params = compile_last_execute(session)
-    for index, alias in enumerate(['"like"', "spoiler", "well_argued"], start=1):
+    for alias in ['"like"', "spoiler", "well_argued"]:
         assert (
-            f"count(*) FILTER (WHERE review_interactions.type = %(type_{index})s) "
-            f"AS {alias}"
+            f"count(*) FILTER (WHERE review_interactions.type = ?) AS {alias}"
         ) in sql
     assert "LEFT OUTER JOIN (SELECT review_interactions.review_id" in sql
     assert "GROUP BY review_interactions.review_id" in sql
-    assert "coalesce(interaction_counts.well_argued, %(coalesce_3)s)" in sql
+    assert "coalesce(interaction_counts.well_argued, ?)" in sql
     # O filtro do filme vale na subquery e na consulta externa.
-    assert sql.count("WHERE reviews.movie_id = %(movie_id_1)s") == 2
+    assert sql.count("WHERE reviews.movie_id = ?") == 2
     assert params["movie_id_1"] == MOVIE_ID
     assert {params["type_1"], params["type_2"], params["type_3"]} == set(
         ReviewInteractionType
@@ -181,7 +181,7 @@ def test_viewer_interactions_groups_by_review(session):
     }
     sql, params = compile_last_execute(session)
     assert "review_interactions.review_id IN (__[POSTCOMPILE_review_id_1])" in sql
-    assert "review_interactions.visitor_id = %(visitor_id_1)s" in sql
+    assert "review_interactions.visitor_id = ?" in sql
     assert params["visitor_id_1"] == "v1"
     assert params["review_id_1"] == [first, second]
 
@@ -196,7 +196,7 @@ def test_get_with_counts_filters_by_id_in_subquery_and_outer_query(session, revi
     result = ReviewRepository(session).get_with_counts(review.id)
     assert result == ReviewWithCounts(review, like=4, spoiler=0, well_argued=9)
     sql, params = compile_last_execute(session)
-    assert sql.count("WHERE reviews.id = %(id_1)s") == 2
+    assert sql.count("WHERE reviews.id = ?") == 2
     assert params["id_1"] == review.id
     assert "LEFT OUTER JOIN (SELECT review_interactions.review_id" in sql
     assert "ORDER BY" not in sql and "LIMIT" not in sql

@@ -1,7 +1,7 @@
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -44,7 +44,13 @@ class InteractionRepository:
                         visitor_id=visitor_id,
                         type=kind,
                     )
-                    .on_conflict_do_nothing(constraint=UNIQUE_VOTE_CONSTRAINT)
+                    .on_conflict_do_nothing(
+                        index_elements=[
+                            ReviewInteraction.review_id,
+                            ReviewInteraction.visitor_id,
+                            ReviewInteraction.type,
+                        ]
+                    )
                 )
             self.session.commit()
         except SQLAlchemyError:

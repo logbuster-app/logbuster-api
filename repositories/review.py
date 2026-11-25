@@ -4,7 +4,17 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Label, Select, func, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Label,
+    Select,
+    exists,
+    func,
+    literal,
+    literal_column,
+    select,
+    update,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -200,11 +210,12 @@ class ReviewRepository:
     def movies_by_highlight(
         self, highlight: Highlight, *, limit: int
     ) -> list[tuple[str, float, int, int]]:
-        highlight_count = (
-            func.count()
-            .filter(Review.highlights.contains([highlight.value]))
-            .label("highlight_count")
+        has_highlight = exists(
+            select(literal(1))
+            .select_from(func.json_each(Review.highlights))
+            .where(literal_column("json_each.value") == highlight.value)
         )
+        highlight_count = func.count().filter(has_highlight).label("highlight_count")
         rating_avg = func.avg(Review.rating)
         rating_count = func.count()
         statement = (

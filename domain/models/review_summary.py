@@ -3,11 +3,10 @@ from uuid import UUID
 
 from sqlalchemy import CheckConstraint, DateTime, Integer, String
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.database import Base
+from utils.db_types import UuidList
 
 
 class ReviewSummary(Base):
@@ -22,7 +21,9 @@ class ReviewSummary(Base):
     __tablename__ = "review_summaries"
     __table_args__ = (
         CheckConstraint(
-            "movie_id ~ '^tt[0-9]{7,10}$'", name="ck_review_summaries_movie_id"
+            "movie_id LIKE 'tt%' AND length(movie_id) BETWEEN 9 AND 12 "
+            "AND substr(movie_id, 3) NOT GLOB '*[^0-9]*'",
+            name="ck_review_summaries_movie_id",
         ),
         CheckConstraint("reviews_count >= 0", name="ck_review_summaries_count"),
     )
@@ -34,9 +35,9 @@ class ReviewSummary(Base):
         Integer, nullable=False, default=0, server_default=sql_text("0")
     )
     source_review_ids: Mapped[list[UUID]] = mapped_column(
-        ARRAY(PGUUID(as_uuid=True)),
+        UuidList,
         nullable=False,
         default=list,
-        server_default=sql_text("'{}'"),
+        server_default=sql_text("'[]'"),
     )
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

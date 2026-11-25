@@ -1,36 +1,46 @@
+import threading
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from domain.models.review_summary import ReviewSummary
 
-LOCK_NAMESPACE = "review-summary:"
+_LOCKS_GUARD = threading.Lock()
+_ACTIVE_SUMMARY_LOCKS: set[str] = set()
 
 
 class ReviewSummaryRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self._locked_movie_id: str | None = None
 
     def get(self, movie_id: str, *, refresh: bool = False) -> ReviewSummary | None:
         return self.session.get(ReviewSummary, movie_id, populate_existing=refresh)
 
     def try_lock(self, movie_id: str) -> bool:
-        """Trava de transação por filme: uma geração em andamento por vez.
-
-        `pg_try_advisory_xact_lock` não espera; a trava some no commit ou
-        rollback, inclusive se o processo cair no meio da geração.
-        """
-        key = func.hashtextextended(f"{LOCK_NAMESPACE}{movie_id}", 0)
-        return bool(self.session.scalar(select(func.pg_try_advisory_xact_lock(key))))
+        """Trava em memória por filme: uma geração em andamento por vez."""
+        with _LOCKS_GUARD:
+            if movie_id in _ACTIVE_SUMMARY_LOCKS:
+                return False
+            _ACTIVE_SUMMARY_LOCKS.add(movie_id)
+            self._locked_movie_id = movie_id
+            return True
 
     def release(self) -> None:
-        """Encerra a transação sem gravar nada, liberando a trava."""
+        """Libera a trava do filme e encerra a transação sem gravar nada."""
+        self._release_lock()
         self.session.rollback()
+
+    def _release_lock(self) -> None:
+        if self._locked_movie_id is None:
+            return
+        with _LOCKS_GUARD:
+            _ACTIVE_SUMMARY_LOCKS.discard(self._locked_movie_id)
+        self._locked_movie_id = None
 
     def save_success(
         self,
@@ -67,3 +77,5 @@ class ReviewSummaryRepository:
         except SQLAlchemyError:
             self.session.rollback()
             raise
+        finally:
+            self._release_lock()

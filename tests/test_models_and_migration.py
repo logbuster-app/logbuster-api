@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -13,7 +14,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
 )
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.schema import CreateTable
 
 from domain.models import Review, ReviewInteraction
@@ -30,7 +31,7 @@ def load_migration(filename):
 
 
 def table_signature(table):
-    dialect = postgresql.dialect()
+    dialect = sqlite.dialect()
     return {
         "columns": [
             (
@@ -99,6 +100,24 @@ def test_migration_matches_models_without_database():
         )
 
     operations.create_foreign_key.side_effect = create_foreign_key
+
+    @contextmanager
+    def batch_alter_table(table_name):
+        batch = MagicMock()
+        batch.add_column.side_effect = lambda col: operations.add_column(
+            table_name, col
+        )
+        batch.create_foreign_key.side_effect = (
+            lambda name, target, local, remote, **kwargs: operations.create_foreign_key(
+                name, table_name, target, local, remote, **kwargs
+            )
+        )
+        batch.create_index.side_effect = (
+            lambda name, columns: operations.create_index(name, table_name, columns)
+        )
+        yield batch
+
+    operations.batch_alter_table.side_effect = batch_alter_table
     initial = load_migration("0001_create_reviews_and_review_interactions.py")
     ownership = load_migration("0002_add_users_and_review_ownership.py")
     images = load_migration("0003_create_profile_images.py")
@@ -137,30 +156,30 @@ def test_migration_downgrade_removes_indexes_and_tables():
 
 
 @pytest.mark.parametrize("model", [Review, ReviewInteraction])
-def test_models_use_uuid_timezone_and_postgresql_ddl(model):
+def test_models_use_uuid_timezone_and_sqlite_ddl(model):
     table = model.__table__
-    sql = str(CreateTable(table).compile(dialect=postgresql.dialect()))
-    assert "UUID" in sql and "TIMESTAMP WITH TIME ZONE" in sql
+    sql = str(CreateTable(table).compile(dialect=sqlite.dialect()))
+    assert "CHAR(32)" in sql and "DATETIME" in sql
     assert table.c.created_at.type.timezone is True
     assert table.c.id.default is not None
 
 
 def test_review_columns_follow_spec():
     table = Review.__table__
-    sql = str(CreateTable(table).compile(dialect=postgresql.dialect()))
+    sql = str(CreateTable(table).compile(dialect=sqlite.dialect()))
     assert "rating NUMERIC(2, 1) NOT NULL" in sql
-    assert "highlights VARCHAR(32)[] DEFAULT '{}' NOT NULL" in sql
+    assert "highlights TEXT DEFAULT '[]' NOT NULL" in sql
     assert "is_spoiler BOOLEAN DEFAULT false NOT NULL" in sql
-    assert "movie_id ~ '^tt[0-9]{7,10}$'" in sql
+    assert "movie_id LIKE 'tt%'" in sql
     assert "rating * 2 = floor(rating * 2)" in sql
-    assert "cardinality(highlights) <= 2" in sql
+    assert "json_array_length(highlights) <= 2" in sql
     # Sem login: o mesmo autor pode avaliar um filme mais de uma vez.
     assert not [c for c in table.constraints if isinstance(c, UniqueConstraint)]
 
 
 def test_interaction_is_unique_per_review_visitor_and_type():
     table = ReviewInteraction.__table__
-    sql = str(CreateTable(table).compile(dialect=postgresql.dialect()))
+    sql = str(CreateTable(table).compile(dialect=sqlite.dialect()))
     assert "UNIQUE (review_id, visitor_id, type)" in sql
     assert "REFERENCES reviews (id) ON DELETE CASCADE" in sql
     assert "type IN ('like', 'spoiler', 'well_argued')" in sql
@@ -191,10 +210,10 @@ def test_review_summary_table_follows_spec():
     from domain.models import ReviewSummary
 
     sql = str(
-        CreateTable(ReviewSummary.__table__).compile(dialect=postgresql.dialect())
+        CreateTable(ReviewSummary.__table__).compile(dialect=sqlite.dialect())
     )
     assert "movie_id VARCHAR(12) NOT NULL" in sql
     assert "PRIMARY KEY (movie_id)" in sql
-    assert "source_review_ids UUID[] DEFAULT '{}' NOT NULL" in sql
-    assert "generated_at TIMESTAMP WITH TIME ZONE" in sql
-    assert "movie_id ~ '^tt[0-9]{7,10}$'" in sql
+    assert "source_review_ids TEXT DEFAULT '[]' NOT NULL" in sql
+    assert "generated_at DATETIME" in sql
+    assert "movie_id LIKE 'tt%'" in sql

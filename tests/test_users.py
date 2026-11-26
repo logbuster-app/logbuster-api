@@ -236,6 +236,7 @@ def test_reviews_use_token_account_and_ignore_legacy_author_name(
 
     assert response.status_code == 201
     assert response.json()["author_name"] == user.display_name
+    assert response.json()["author_id"] == str(user.id)
     session.get.assert_called_once_with(User, user.id)
     session.add.assert_called_once()
     saved = session.add.call_args.args[0]
@@ -254,6 +255,7 @@ def test_movie_list_includes_legacy_anonymous_reviews(auth_client, session, revi
     assert response.json()["total"] == 1
     (item,) = response.json()["items"]
     assert (item["id"], item["author_name"]) == (str(review.id), review.author_name)
+    assert item["author_id"] is None
     statement = session.execute.call_args.args[0]
     assert statement.whereclause.compare(Review.movie_id == review.movie_id)
 

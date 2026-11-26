@@ -93,6 +93,15 @@ class ReviewResponse(BaseModel):
     id: UUID
     movie_id: str
     author_name: str
+    author_id: Annotated[
+        UUID | None,
+        Field(
+            description=(
+                "Conta do autor, para o link ao perfil público. Nulo nas avaliações "
+                "anônimas anteriores ao login obrigatório (CR-01)."
+            )
+        ),
+    ] = None
     rating: Annotated[float, Field(ge=0.5, le=5.0, multiple_of=0.5)]
     content: str
     is_spoiler: Annotated[
@@ -126,6 +135,7 @@ class ReviewResponse(BaseModel):
             id=review.id,
             movie_id=review.movie_id,
             author_name=review.author_name,
+            author_id=review.user_id,
             rating=float(review.rating),
             content=review.content,
             is_spoiler=review.is_spoiler,

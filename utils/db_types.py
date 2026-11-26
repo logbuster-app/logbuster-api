@@ -1,11 +1,38 @@
-"""Tipos portáveis do SQLAlchemy para armazenamento de listas em SQLite."""
+"""Tipos portáveis do SQLAlchemy para SQLite (listas JSON e datetimes UTC)."""
 
 import json
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Text
+from sqlalchemy import DateTime, Text
 from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """Garante datetimes com `tzinfo=UTC` ao ler colunas `DATETIME` do SQLite."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+    timezone = True
+
+    def process_bind_param(
+        self, value: datetime | None, dialect: Dialect
+    ) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.astimezone(UTC)
+        return value
+
+    def process_result_value(
+        self, value: datetime | None, dialect: Dialect
+    ) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 class StringList(TypeDecorator[list[str]]):

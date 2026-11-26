@@ -1,11 +1,12 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domain.models.profile_image import ProfileImage
 from utils.database import Base
+from utils.db_types import UTCDateTime
 
 
 class User(Base):
@@ -19,6 +20,6 @@ class User(Base):
     bio: Mapped[str | None] = mapped_column(String(160))
     avatar_id: Mapped[str | None] = mapped_column(String(9))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
     profile_images: Mapped[list[ProfileImage]] = relationship(viewonly=True)

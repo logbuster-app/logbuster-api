@@ -1,12 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String
+from sqlalchemy import CheckConstraint, Integer, String
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.database import Base
-from utils.db_types import UuidList
+from utils.db_types import UTCDateTime, UuidList
 
 
 class ReviewSummary(Base):
@@ -30,7 +30,7 @@ class ReviewSummary(Base):
 
     movie_id: Mapped[str] = mapped_column(String(12), primary_key=True)
     text: Mapped[str | None] = mapped_column(String(2000))
-    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     reviews_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=sql_text("0")
     )
@@ -40,4 +40,4 @@ class ReviewSummary(Base):
         default=list,
         server_default=sql_text("'[]'"),
     )
-    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

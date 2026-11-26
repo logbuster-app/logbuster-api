@@ -3,7 +3,6 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     Enum,
     ForeignKey,
     String,
@@ -15,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from domain.enums import ReviewInteractionType
 from utils.database import Base
+from utils.db_types import UTCDateTime
 
 
 class ReviewInteraction(Base):
@@ -60,5 +60,5 @@ class ReviewInteraction(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )

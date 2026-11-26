@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    DateTime,
     ForeignKey,
     Index,
     Numeric,
@@ -17,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.database import Base
-from utils.db_types import StringList
+from utils.db_types import StringList, UTCDateTime
 
 
 class Review(Base):
@@ -57,7 +56,7 @@ class Review(Base):
         StringList, nullable=False, default=list, server_default=text("'[]'")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
     user_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
